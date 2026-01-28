@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { logInteraction } from '../API/trackingService';
 
 // Hàm xử lý link YouTube (biến link thường thành link phát được)
 const getEmbedUrl = (url) => {
@@ -33,6 +34,10 @@ function SongDetail() {
             .then(res => res.json())
             .then(data => setRecommendations(data))
             .catch(err => console.error(err));
+
+        if(id){
+            logInteraction(id, 'song', 'view');
+            }
     }, [id]);
 
     if (!song) return <div style={{color:'white', padding: 20}}>⏳ Đang tải nhạc...</div>;

@@ -234,3 +234,28 @@ app.get('/api/search', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server đang chạy tại http://localhost:${PORT}`);
 }); 
+
+// API ghi nhận hành động người dùng
+app.post('/api/log-interaction', async (req, res) => {
+    try{
+        const{ userId, itemId, itemType, actionType } = req.body;
+
+        let pool = await sql.connect(dbConfig);
+
+        await pool.request()
+        .input('UserID', sql.Int, userId || null)
+        .input('ItemID', sql.NVarChar, itemId)
+        .input('ItemType', sql.NVarChar, itemType)
+        .input('ActionType', sql.NVarChar, actionType)
+        .query (`
+            INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType)
+            VALUES (@UserID, @ItemID, @ItemType, @ActionType)
+            `);
+        
+    res.status(200).send({message: 'Log saved'});
+    }   catch (err)
+    {
+        console.error("Lỗi ghi log:",err);
+        res.status(500).send({error: 'Lỗi Server'});
+    }
+});

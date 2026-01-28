@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, href } from 'react-router-dom';
+import { logInteraction } from '../API/trackingService';
 
 function MovieDetail() {
     const { id } = useParams();
@@ -22,6 +23,9 @@ function MovieDetail() {
             .then(data => setRecommendations(data))
             .catch(err => console.error("Lỗi lấy gợi ý:", err));
 
+        if(id){
+            logInteraction(id, 'movie', 'view');
+            }
     }, [id]);
 
     console.log("Dữ liệu phim nhận được:", movie); 
