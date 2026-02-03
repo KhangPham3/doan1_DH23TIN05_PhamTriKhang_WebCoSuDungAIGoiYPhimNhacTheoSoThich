@@ -21,3 +21,4 @@ export const logInteraction = async(itemId, itemType, actionType = 'View') => {
     console.error("Không gửi được log:",error);
 }
 };
+

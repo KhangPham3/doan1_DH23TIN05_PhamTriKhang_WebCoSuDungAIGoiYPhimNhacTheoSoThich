@@ -1,33 +1,27 @@
 import { useState, useEffect } from 'react';
 import Card from '../Components/UI/Card'; 
+import { fetchMovies, IMAGE_URL } from '../API/tmdbAPI';
 
 function MovieList() {
     const [movies, setMovies] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    // --- 1. LOGIC PHÂN TRANG ---
+    
+    // 1. Thêm State để quản lý Trang hiện tại
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10; // Giới hạn 10 phim/trang
+    const itemsPerPage = 10; // Số phim hiển thị trên mỗi màn hình (tùy chỉnh)
 
     useEffect(() => {
-        fetch('http://localhost:5000/api/movies')
-            .then(res => {
-                if (!res.ok) throw new Error('Không thể kết nối Server');
-                return res.json();
-            })
-            .then(data => {
-                setMovies(data);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error("Lỗi tải phim:", err);
-                setError("Không thể tải danh sách phim.");
-                setLoading(false);
-            });
+        const loadData = async () => {
+            setLoading(true);
+            // Lấy khoảng 5 trang từ API (~100 bộ phim) để User tha hồ chọn
+            const listPhim = await fetchMovies(5); 
+            setMovies(listPhim);
+            setLoading(false);
+        };
+        loadData();
     }, []);
 
-    // --- 2. TÍNH TOÁN DỮ LIỆU ĐỂ HIỂN THỊ ---
+    // 2. Logic tính toán Phân trang
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentMovies = movies.slice(indexOfFirstItem, indexOfLastItem);
@@ -36,67 +30,62 @@ function MovieList() {
     // Hàm chuyển trang
     const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
-    if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>⏳ Đang tải kho phim...</div>;
-    if (error) return <div style={{ padding: '50px', textAlign: 'center', color: '#e50914' }}>⚠️ {error}</div>;
+    if (loading) return <p style={{color:'white', textAlign:'center', padding: '50px'}}>⏳ Đang tải kho phim...</p>;
 
     return (
-        
-        <div style={{ paddingBottom: '50px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '50px', paddingLeft: '10px', borderLeft: '4px solid var(--primary-movie)', marginTop: '50px' }}>
-                <h2 style={{ marginBottom: '10px' , margin: 0, fontSize: '1.8rem', textTransform: 'uppercase', letterSpacing: '1px', paddingBottom: '10px' }}>
-                    Phim Đề Cử
-                </h2>
-            </div> 
-
-            {/* Grid hiển thị 10 phim hiện tại */}
+        <div className="section-container" style={{ paddingBottom: '50px' }}>
+            <h2 style={{color: '#e50914', marginBottom: '30px', paddingLeft: '20px', borderLeft: '4px solid #e50914'}}>
+                KHÁM PHÁ KHO PHIM ({movies.length} bộ phim)
+            </h2>
+            
             <div className="media-grid">
-                {currentMovies.map(m => (
+                {currentMovies.map((movie) => (
                     <Card 
-                        key={m.MovieID}
-                        id={m.MovieID}
-                        type="movie"
-                        title={m.Title}
-                        subtitle={`${m.ReleaseYear} • ${m.Genre}`}
-                        image={m.PosterURL}
+                        key={movie.id}
+                        id={movie.id}
+                        title={movie.title}
+                        image={movie.poster_path ? `${IMAGE_URL}${movie.poster_path}` : 'https://via.placeholder.com/300'}
+                        subtitle={`${movie.release_date?.split('-')[0]} • ⭐ ${movie.vote_average?.toFixed(1)}`}
                     />
                 ))}
             </div>
-            {/* --- PHẦN NÚT PHÂN TRANG (PAGINATION) --- */}
-            {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '40px' }}>
-                    
-                    {/* Nút Trước */}
-                    <button 
-                        onClick={() => paginate(currentPage - 1)} 
-                        disabled={currentPage === 1}
-                        className="btn-pagination"
-                    >
-                        ❮
-                    </button>
 
-                    {/* Các nút số */}
-                    {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                            key={i + 1}
-                            onClick={() => paginate(i + 1)}
-                            className={`btn-pagination ${currentPage === i + 1 ? 'active-mode' : ''}`}
-                        >
-                            {i + 1}
-                        </button>
-                    ))}
+            {/* 3. GIAO DIỆN NÚT PHÂN TRANG */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '40px', gap: '10px' }}>
+                <button 
+                    onClick={() => paginate(currentPage - 1)} 
+                    disabled={currentPage === 1}
+                    className="btn-pagination"
+                >
+                    ❮ Trước
+                </button>
 
-                    {/* Nút Sau */}
+                {Array.from({ length: totalPages }, (_, i) => (
                     <button 
-                        onClick={() => paginate(currentPage + 1)} 
-                        disabled={currentPage === totalPages}
-                        className="btn-pagination"
+                        key={i + 1} 
+                        onClick={() => paginate(i + 1)}
+                        style={{
+                            padding: '8px 15px',
+                            backgroundColor: currentPage === i + 1 ? '#e50914' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                        }}
                     >
-                        ❯
+                        {i + 1}
                     </button>
-                </div>
-            )}
+                ))}
+
+                <button 
+                    onClick={() => paginate(currentPage + 1)} 
+                    disabled={currentPage === totalPages}
+                    className="btn-pagination"
+                >
+                    Sau ❯
+                </button>
+            </div>
         </div>
-    
     );
 }
 
