@@ -45,3 +45,37 @@ export const searchMovies = async (keyword) => {
         return [];
     }
 };
+
+// ... (Các code cũ giữ nguyên)
+
+// 4. Hàm LỌC PHIM NÂNG CAO (Discover)
+export const discoverMovies = async (filters = {}) => {
+    try {
+        const { sortBy, withGenres, releaseYear, region } = filters;
+        
+        let url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=vi-VN&page=1`;
+        
+        if (sortBy) url += `&sort_by=${sortBy}`;
+        if (withGenres) url += `&with_genres=${withGenres}`;
+        if (releaseYear) url += `&primary_release_year=${releaseYear}`;
+        if (region) url += `&region=${region}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+        return data.results || [];
+    } catch (error) {
+        console.error("Lỗi lọc phim:", error);
+        return [];
+    }
+};
+
+// 5. Hàm lấy danh sách Thể loại (Để hiện trong bộ lọc)
+export const fetchGenres = async () => {
+    try {
+        const response = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=vi-VN`);
+        const data = await response.json();
+        return data.genres || [];
+    } catch (error) {
+        return [];
+    }
+};

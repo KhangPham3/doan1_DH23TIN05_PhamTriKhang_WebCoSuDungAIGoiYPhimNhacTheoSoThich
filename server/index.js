@@ -228,6 +228,74 @@ app.get('/api/search', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+
+    // ... (Các phần import và config DB cũ giữ nguyên)
+
+// 1. API ĐĂNG KÝ (Register)
+app.post('/api/register', async (req, res) => {
+    const { username, password, fullName, email, birthYear, gender } = req.body;
+    try {
+        let pool = await sql.connect(dbConfig);
+        
+        // Kiểm tra xem user đã tồn tại chưa
+        const checkUser = await pool.request()
+            .input('Username', sql.VarChar, username)
+            .query("SELECT * FROM Users WHERE Username = @Username");
+            
+        if (checkUser.recordset.length > 0) {
+            return res.status(400).json({ success: false, message: "Tên đăng nhập đã tồn tại!" });
+        }
+
+        // Lưu vào SQL (Lưu ý: Mật khẩu nên mã hóa, nhưng ở đây ta lưu text trước cho đơn giản)
+        await pool.request()
+            .input('Username', sql.VarChar, username)
+            .input('PasswordHash', sql.VarChar, password) // Sau này bạn nên dùng bcrypt để hash
+            .input('FullName', sql.NVarChar, fullName)
+            .input('Email', sql.VarChar, email)
+            .input('BirthYear', sql.Int, birthYear)
+            .input('Gender', sql.NVarChar, gender)
+            .query(`
+                INSERT INTO Users (Username, PasswordHash, FullName, Email, BirthYear, Gender)
+                VALUES (@Username, @PasswordHash, @FullName, @Email, @BirthYear, @Gender)
+            `);
+
+        res.json({ success: true, message: "Đăng ký thành công!" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: "Lỗi Server" });
+    }
+});
+
+// 2. API ĐĂNG NHẬP (Login)
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        let pool = await sql.connect(dbConfig);
+        const result = await pool.request()
+            .input('Username', sql.VarChar, username)
+            .input('PasswordHash', sql.VarChar, password)
+            .query("SELECT * FROM Users WHERE Username = @Username AND PasswordHash = @PasswordHash");
+
+        if (result.recordset.length > 0) {
+            const user = result.recordset[0];
+            // Trả về thông tin user (trừ mật khẩu)
+            res.json({ 
+                success: true, 
+                user: { 
+                    id: user.UserID, 
+                    username: user.Username, 
+                    fullName: user.FullName 
+                } 
+            });
+        } else {
+            res.status(401).json({ success: false, message: "Sai tên đăng nhập hoặc mật khẩu" });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Lỗi Server" });
+    }
+});
+
+// ... (Giữ nguyên phần app.listen)
 });
 
 // ... (Code app.listen ở dưới)

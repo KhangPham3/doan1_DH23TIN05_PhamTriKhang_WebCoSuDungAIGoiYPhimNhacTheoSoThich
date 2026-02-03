@@ -6,8 +6,14 @@ import { searchMovies, IMAGE_URL } from '../API/tmdbAPI';
 function Navigation() {
     const [keyword, setKeyword] = useState('');
     const [scrolled, setScrolled] = useState(false);
-    
-    // State cho tìm kiếm
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+
+    const handleLogout = () => {
+        localStorage.removeItem('currentUser');
+        navigate('/login');
+        window.location.reload();
+    };
+        // State cho tìm kiếm
     const [suggestions, setSuggestions] = useState([]); 
     const [showSearchDropdown, setShowSearchDropdown] = useState(false); 
     
@@ -229,14 +235,22 @@ function Navigation() {
             <div style={{ minWidth: '300px' }}></div>
            
             {/* Nút login / signup */}
-            <div>
-                <button style={{ marginRight: '10px', padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer' }}>
-                  Đăng Nhập 
-                </button>
-                <button style={{marginRight: '50px', padding: '10px 25px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer' }}>
-                    Đăng ký
-                </button>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            {user ? (
+             <>
+            <span style={{ color: 'white', fontWeight: 'bold' }}>Xin chào, {user.fullName}</span>
+            <button onClick={handleLogout} style={{ padding: '8px 15px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer' }}>
+                Đăng xuất
+            </button>
+            </>
+            ) : (
+             <>
+            <button onClick={() => navigate('/login')} style={{ marginRight: '10px', padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer' }}>
+                Đăng Nhập 
+            </button>
+              </>
+    )}
+</div>
 
         </nav>
     );

@@ -1,89 +1,51 @@
 import { useState, useEffect } from 'react';
 import Card from '../Components/UI/Card'; 
+import { fetchMusicCharts } from '../API/MusicAPI';
 
 function SongList() {
     const [songs, setSongs] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    // --- LOGIC PHÂN TRANG ---
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10; // Giới hạn 10 nhạc/trang
 
     useEffect(() => {
-        fetch('http://localhost:5000/api/songs')
-            .then(res => res.json())
-            .then(data => {
-                setSongs(data);
-                setLoading(false);
-            })
-            .catch(err => {
-                setError("Lỗi tải nhạc");
-                setLoading(false);
-            });
+        const loadData = async () => {
+            setLoading(true);
+            try {
+                const data = await fetchMusicCharts();
+                if (Array.isArray(data)) {
+                    setSongs(data);
+                }
+            } catch (error) {
+                console.error("Lỗi tải nhạc:", error);
+            }
+            setLoading(false);
+        };
+        loadData();
     }, []);
 
-    // Tính toán cắt mảng
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentSongs = songs.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(songs.length / itemsPerPage);
-
-    const paginate = (pageNumber) => setCurrentPage(pageNumber);
-
-    if (loading) return <div style={{padding:40, textAlign:'center'}}>⏳ Đang tải nhạc...</div>;
-    if (error) return <div style={{padding:40, textAlign:'center', color:'red'}}>⚠️ {error}</div>;
+    if (loading) return <div style={{color:'white', textAlign:'center', padding: 50}}>⏳ Đang tải 100 bài hát...</div>;
 
     return (
         <div style={{ paddingBottom: '50px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', paddingLeft: '10px', borderLeft: '4px solid var(--primary-music)' }}>
-                <h2 style={{ margin: 0, fontSize: '1.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    Bảng Xếp Hạng
-                </h2>
-            </div>
+            <h2 style={{ color: '#1db954', paddingLeft: '20px', borderLeft: '4px solid #1db954', margin: '30px 0 20px 40px' }}>
+                TOP 100 BÀI HÁT THỊNH HÀNH
+            </h2>
 
             <div className="media-grid">
-                {currentSongs.map(s => (
+                {songs.map((s, index) => (
                     <Card 
-                        key={s.SongID}
-                        id={s.SongID}
+                        // 👇 QUAN TRỌNG: Phải dùng s.videoId làm ID
+                        key={s.videoId || index}
+                        id={s.videoId} 
                         type="song"
-                        title={s.Title}
-                        subtitle={s.Artist}
-                        image={s.CoverImageURL}
+                        
+                        title={s.title}
+                        subtitle={s.artists ? s.artists.map(a => a.name).join(', ') : 'N/A'}
+                        
+                        // Lấy ảnh chất lượng cao nhất
+                        image={s.thumbnails && s.thumbnails.length > 0 ? s.thumbnails[s.thumbnails.length - 1].url : ''} 
                     />
                 ))}
             </div>
-            {/* --- PHẦN NÚT PHÂN TRANG (PAGINATION) --- */}
-            {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '40px' }}>
-                    <button 
-                        onClick={() => paginate(currentPage - 1)} 
-                        disabled={currentPage === 1}
-                        className="btn-pagination"
-                    >
-                        ❮
-                    </button>
-
-                    {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                            key={i + 1}
-                            onClick={() => paginate(i + 1)}
-                            className={`btn-pagination ${currentPage === i + 1 ? 'active-mode' : ''}`}
-                        >
-                            {i + 1}
-                        </button>
-                    ))}
-
-                    <button 
-                        onClick={() => paginate(currentPage + 1)} 
-                        disabled={currentPage === totalPages}
-                        className="btn-pagination"
-                    >
-                        ❯
-                    </button>
-                </div>
-            )}     
         </div>
     );
 }
