@@ -7,8 +7,8 @@ import MoviePage from './List/MovieList';
 import SongPage from './Page/SongPage'; // 👈 Import trang mới (đổi từ SongList thành SongPage)
 import MovieDetail from './Detail/MovieDetail';
 import SongDetail from './Detail/SongDetail';
-import Searchpage from './Detail/Searchpage';
 import RecommendPage from './Page/RecommendPage';
+import Searchpage from './Page/SearchPage';
 
 import './App.css';
 
@@ -19,7 +19,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
-        
+        <Route path="/search" element={<Searchpage />} />
         {/* Route Movies giữ nguyên */}
         <Route path="/movies" element={<MoviePage />} />
         

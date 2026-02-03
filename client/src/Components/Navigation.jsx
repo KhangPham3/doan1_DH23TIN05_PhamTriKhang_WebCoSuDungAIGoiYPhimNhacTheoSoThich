@@ -1,66 +1,88 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-// 👇 Import hàm tìm kiếm và link ảnh từ API
+// 👇 Import API
 import { searchMovies, IMAGE_URL } from '../API/tmdbAPI';
+import { searchMusic } from '../API/MusicAPI'; // Nhớ đảm bảo file này đã tồn tại
 
 function Navigation() {
     const [keyword, setKeyword] = useState('');
     const [scrolled, setScrolled] = useState(false);
     const user = JSON.parse(localStorage.getItem('currentUser'));
 
+    const navigate = useNavigate();
+    const searchRef = useRef(null);
+    const genreMenuTimeoutRef = useRef(null);
+
+    // State
+    const [suggestions, setSuggestions] = useState([]); 
+    const [showSearchDropdown, setShowSearchDropdown] = useState(false); 
+    const [showGenreMenu, setShowGenreMenu] = useState(false);
+
+    // --- 1. XỬ LÝ LOGOUT ---
     const handleLogout = () => {
         localStorage.removeItem('currentUser');
         navigate('/login');
         window.location.reload();
     };
-        // State cho tìm kiếm
-    const [suggestions, setSuggestions] = useState([]); 
-    const [showSearchDropdown, setShowSearchDropdown] = useState(false); 
-    
-    // State cho menu Thể Loại
-    const [showGenreMenu, setShowGenreMenu] = useState(false);
-    const genreMenuTimeoutRef = useRef(null);
-    const navigate = useNavigate();
-    const searchRef = useRef(null);
 
-    // --- 1. XỬ LÝ SCROLL (Giữ nguyên) ---
+    // --- 2. XỬ LÝ SCROLL ---
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // --- 2. XỬ LÝ TÌM KIẾM API (Thay thế phần cũ) ---
+    // --- 3. XỬ LÝ TÌM KIẾM ĐA NĂNG (PHIM + NHẠC) ---
     useEffect(() => {
-        // Hàm này sẽ chạy mỗi khi "keyword" thay đổi
         const timer = setTimeout(async () => {
             if (keyword.trim().length > 1) {
-                // Gọi API TMDB
-                const results = await searchMovies(keyword);
-                
-                // Chuẩn hóa dữ liệu API để khớp với giao diện cũ
-                const mappedResults = results.slice(0, 6).map(item => ({
-                    id: item.id,
-                    name: item.title,      // API trả về 'title' -> đổi thành 'name'
-                    type: 'movie',         // Mặc định là movie
-                    sub: item.release_date ? item.release_date.substring(0, 4) : 'N/A', // Lấy năm phát hành
-                    PosterURL: item.poster_path ? `${IMAGE_URL}${item.poster_path}` : null // Ghép link ảnh
-                }));
+                try {
+                    // Gọi song song 2 API
+                    const [movieRes, songRes] = await Promise.all([
+                        searchMovies(keyword),
+                        searchMusic(keyword)
+                    ]);
 
-                setSuggestions(mappedResults);
-                setShowSearchDropdown(true);
+                    // 1. Chuẩn hóa kết quả Phim
+                    const mappedMovies = movieRes.slice(0, 3).map(item => ({
+                        id: item.id,
+                        name: item.title,
+                        type: 'movie',
+                        sub: item.release_date ? item.release_date.substring(0, 4) : 'Phim',
+                        // Ghép link ảnh TMDB
+                        image: item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/50'
+                    }));
+
+                    // 2. Chuẩn hóa kết quả Nhạc (Lọc lấy bài có videoId)
+                    const mappedSongs = (Array.isArray(songRes) ? songRes : [])
+                        .filter(s => s.videoId)
+                        .slice(0, 3)
+                        .map(item => ({
+                            id: item.videoId,
+                            name: item.title,
+                            type: 'song',
+                            sub: item.artists ? item.artists[0].name : 'Nhạc',
+                            // Nhạc có sẵn link ảnh
+                            image: item.thumbnails ? item.thumbnails[0].url : 'https://via.placeholder.com/50'
+                        }));
+
+                    // 3. Gộp lại
+                    setSuggestions([...mappedMovies, ...mappedSongs]);
+                    setShowSearchDropdown(true);
+
+                } catch (error) {
+                    console.error("Lỗi tìm kiếm:", error);
+                }
             } else {
                 setSuggestions([]);
                 setShowSearchDropdown(false);
             }
-        }, 200); // Debounce: Đợi 0.5s sau khi ngừng gõ mới tìm
+        }, 500); // Debounce 0.5s
 
-        return () => clearTimeout(timer); // Xóa timer cũ nếu người dùng gõ tiếp
+        return () => clearTimeout(timer);
     }, [keyword]);
 
-    // --- 3. LOGIC MENU THỂ LOẠI (Dùng danh sách tĩnh vì không còn load allData) ---
-    // Vì ta không load toàn bộ phim nữa nên không thể tự lọc thể loại. 
-    // Ta dùng danh sách cứng các thể loại phổ biến.
+    // --- 4. LOGIC MENU THỂ LOẠI ---
     const staticGenres = {
         movieGenres: ["Hành động", "Tình cảm", "Hài", "Kinh dị", "Viễn tưởng", "Hoạt hình"],
         songGenres: ["Pop", "Rap", "Ballad", "R&B", "EDM", "Indie"]
@@ -76,7 +98,7 @@ function Navigation() {
         }, 300);
     };
 
-    // --- 4. CÁC HÀM XỬ LÝ SỰ KIỆN KHÁC ---
+    // --- 5. CÁC HÀM SỰ KIỆN KHÁC ---
     useEffect(() => {
         function handleClickOutside(event) {
             if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -87,14 +109,15 @@ function Navigation() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleInputChange = (e) => {
-        setKeyword(e.target.value);
-        // Lưu ý: Logic gọi API đã chuyển vào useEffect phía trên
-    };
+    const handleInputChange = (e) => setKeyword(e.target.value);
 
+    // Chuyển hướng đúng trang khi bấm vào gợi ý
     const handleSelectSuggestion = (item) => {
-        // Chuyển hướng đến trang chi tiết
-        navigate(`/movie/${item.id}`);
+        if (item.type === 'movie') {
+            navigate(`/movie/${item.id}`);
+        } else {
+            navigate(`/song/${item.id}`);
+        }
         setShowSearchDropdown(false);
         setKeyword(''); 
     };
@@ -102,7 +125,7 @@ function Navigation() {
     const handleSearchSubmit = (e) => {
         e.preventDefault();
         if (keyword.trim()) {
-            navigate(`/search?q=${keyword}`); // Chuyển sang trang SearchPage
+            navigate(`/search?q=${keyword}`);
             setShowSearchDropdown(false);
         }
     };
@@ -185,11 +208,11 @@ function Navigation() {
                 </div>
             </div>
 
-            {/* --- KHU VỰC 2: SEARCH BAR (GỌI API) --- */}
+            {/* --- KHU VỰC 2: SEARCH BAR (GỌI API KÉP) --- */}
             <div ref={searchRef} style={{ flex: 1, maxWidth: '500px', position: 'relative', marginTop: '10px' }}>
                 <form onSubmit={handleSearchSubmit} style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
                     <input 
-                        type="text" placeholder="Tìm phim trên TMDB..." value={keyword}
+                        type="text" placeholder="Tìm phim hoặc bài hát..." value={keyword}
                         onChange={handleInputChange} 
                         onFocus={() => keyword && suggestions.length > 0 && setShowSearchDropdown(true)}
                         style={{ 
@@ -216,14 +239,16 @@ function Navigation() {
                         {suggestions.map((item, index) => (
                             <div key={index} onClick={() => handleSelectSuggestion(item)} className="search-item"
                                 style={{ padding: '10px 15px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', borderBottom: '1px solid #333' }}>
+                                {/* Dùng biến 'image' đã chuẩn hóa */}
                                 <img 
-                                    src={item.PosterURL || 'https://via.placeholder.com/40'} 
+                                    src={item.image} 
                                     style={{ width: '40px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} 
                                     alt="" 
                                 />
                                 <div>
                                     <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</div>
                                     <div style={{ color: '#aaa', fontSize: '0.75rem' }}>
+                                        {/* Hiển thị loại tương ứng */}
                                         {item.type === 'movie' ? '🎬 Phim' : '🎵 Nhạc'} • {item.sub}
                                     </div>
                                 </div>
@@ -236,21 +261,21 @@ function Navigation() {
            
             {/* Nút login / signup */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            {user ? (
-             <>
-            <span style={{ color: 'white', fontWeight: 'bold' }}>Xin chào, {user.fullName}</span>
-            <button onClick={handleLogout} style={{ padding: '8px 15px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer' }}>
-                Đăng xuất
-            </button>
-            </>
-            ) : (
-             <>
-            <button onClick={() => navigate('/login')} style={{ marginRight: '10px', padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer' }}>
-                Đăng Nhập 
-            </button>
-              </>
-    )}
-</div>
+                {user ? (
+                    <>
+                        <span style={{ color: 'white', fontWeight: 'bold' }}>Xin chào, {user.fullName}</span>
+                        <button onClick={handleLogout} style={{ padding: '8px 15px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer' }}>
+                            Đăng xuất
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <button onClick={() => navigate('/login')} style={{ marginRight: '10px', padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer' }}>
+                            Đăng Nhập 
+                        </button>
+                    </>
+                )}
+            </div>
 
         </nav>
     );
