@@ -56,7 +56,7 @@ function Footer() {
           </h3>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, lineHeight: '2' }}>
             <li>👤 <strong>Admin:</strong> Khang Phạm</li>
-            <li>📧 <strong>Email:</strong> khangphamforwork@gmail.com</li>
+            <li>📧 <strong>Email:</strong> s235187@nctu.edu.vn</li>
             <li>📞 <strong>Hotline:</strong> 0905.XXX.XXX</li>
             <li>🏢 <strong>Địa chỉ:</strong> Đại Học Nam Cần Thơ</li>
           </ul>

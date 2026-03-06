@@ -2,6 +2,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ytmusicapi import YTMusic
 
+#Thư viện cho AI dựa vào user interaction
+import pyodbc
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+
 app = Flask(__name__)
 CORS(app) # Cho phép mọi nguồn gọi vào (React)
 
@@ -66,7 +71,6 @@ if __name__ == '__main__':
     print("🎵 Music Server running on http://localhost:8000")
     app.run(port=8000, debug=True)
 
-# ... (đoạn import giữ nguyên)
 
 # 3. API Lấy Bảng Xếp Hạng (Sửa để lấy 50 bài)
 @app.route('/api/charts', methods=['GET'])
@@ -78,4 +82,78 @@ def get_charts():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ... (phần còn lại giữ nguyên)
+# AI Logic
+def get_ai_recommendations(user_id, item_type='movie'):
+    try:
+        conn = pyodbc.connect(
+            'DRIVER={ODBC Driver 17 for SQL Server};'
+            'SERVER=localhost;'
+            'DATABASE=RecommenderDB;'
+            'UID=ADMIN;PWD=KhangPham2005'
+        )
+        
+        # CHỈ LẤY DỮ LIỆU TƯƠNG TÁC (KHÔNG CẦN JOIN VỚI BẢNG MOVIES/SONGS)
+        query = f"""
+            SELECT UserID, ItemID, 
+            CASE 
+                WHEN ActionType = 'LIKE' THEN 5 
+                WHEN ActionType = 'VIEW' THEN 1 
+                ELSE 0 
+            END as Rating
+            FROM UserInteractions
+            WHERE ItemType = '{item_type}'
+        """
+        df = pd.read_sql(query, conn)
+        conn.close()
+
+        if df.empty: return []
+
+        # Tạo ma trận và tính toán (Giống code trước)
+        user_item_matrix = df.pivot_table(index='UserID', columns='ItemID', values='Rating', aggfunc='max').fillna(0)
+        
+        if user_id not in user_item_matrix.index: return []
+
+        user_similarity = cosine_similarity(user_item_matrix)
+        user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
+        
+        similar_users = user_similarity_df[user_id].sort_values(ascending=False).index[1:]
+        
+        suggested_items = {}
+        watched_items = set(user_item_matrix.loc[user_id][user_item_matrix.loc[user_id] > 0].index)
+
+        for other_user in similar_users:
+            other_user_ratings = user_item_matrix.loc[other_user]
+            liked_items = other_user_ratings[other_user_ratings >= 3].index
+            
+            for item in liked_items:
+                if item not in watched_items:
+                    suggested_items[item] = suggested_items.get(item, 0) + user_similarity_df[user_id][other_user]
+            
+            if len(suggested_items) >= 10: break
+        
+        sorted_suggestions = sorted(suggested_items.items(), key=lambda x: x[1], reverse=True)
+        
+        # TRẢ VỀ DANH SÁCH ID (Dạng String hoặc Int tùy dữ liệu gốc)
+        return [str(item[0]) for item in sorted_suggestions[:10]]
+
+    except Exception as e:
+        print(f"Lỗi AI: {e}")
+        return []
+    
+# API Endpoint cho React gọi
+@app.route('/api/recommend/movies', methods=['GET'])
+def recommend_movies():
+    user_id = request.args.get('userId')
+    if not user_id: return jsonify([])
+    # Trả về list ID (VD: ["123", "456"])
+    return jsonify(get_ai_recommendations(int(user_id), 'movie'))
+
+@app.route('/api/recommend/songs', methods=['GET'])
+def recommend_songs():
+    user_id = request.args.get('userId')
+    if not user_id: return jsonify([])
+    return jsonify(get_ai_recommendations(int(user_id), 'song'))
+
+if __name__ == '__main__':
+    print("🤖 AI & Music Server running on http://localhost:8000")
+    app.run(port=8000, debug=True)

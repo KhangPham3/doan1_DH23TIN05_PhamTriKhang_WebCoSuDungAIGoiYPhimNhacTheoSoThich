@@ -45,14 +45,19 @@ const HeroSection = () => {
           {movie.overview || "Phim đang cực hot, hãy xem ngay để cảm nhận!"}
         </p>
 
-        <div style={{ display: 'flex', gap: '15px' }}>
-          <Button icon="▶" onClick={() => navigate(`/movie/${movie.id}`)}>
-            Xem Ngay
-          </Button>
-          <Button type="secondary" icon="ℹ️" onClick={() => navigate(`/movie/${movie.id}`)}>
-            Chi Tiết
-          </Button>
-        </div>
+        <div style={{ display: 'flex', gap: '20px', marginTop: '30px' }}>
+    {/* Nút Xem Ngay (Mặc định là primary đỏ) */}
+    <Button 
+        icon="▶" 
+        type="primary" 
+        onClick={() => navigate(`/movie/${movie.id}`)}
+    >
+        Xem Ngay
+    </Button>
+
+    {/* Nút Chi Tiết (Secondary kính mờ) */}
+  
+    </div>
       </div>
     </div>
   );

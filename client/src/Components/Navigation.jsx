@@ -88,8 +88,6 @@ function Navigation() {
         songGenres: ["Pop", "Rap", "Ballad", "R&B", "EDM", "Indie"]
     };
     
-    const staticAgeGroups = ["Mọi lứa tuổi", "Trên 7 tuổi", "Trên 13 tuổi", "Trên 16 tuổi", "Trên 18 tuổi"];
-
     const handleGenreMouseEnter = () => {
         if (genreMenuTimeoutRef.current) clearTimeout(genreMenuTimeoutRef.current);
         setShowGenreMenu(true);
@@ -132,26 +130,27 @@ function Navigation() {
         }
     };
 
-    const handleGenreClick = (genreName) => {
-        navigate(`/search?q=${genreName}`);
+    
+    const handleGenreClick = (genreName, type) => {
+        navigate(`/search?q=${genreName}&type=${type}`);
         setShowGenreMenu(false);
-    };
-
+};
     return (
         <nav style={{ 
             position: 'fixed', top: 0, width: '100%', zIndex: 9999,
             padding: '10px 40px', height: '70px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', // Đã có sẵn, rất tốt!
             transition: 'all 0.3s ease',
             background: scrolled ? '#0f0f0f' : 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, transparent 100%)',
-            backdropFilter: scrolled ? 'blur(10px)' : 'none'
+            backdropFilter: scrolled ? 'blur(10px)' : 'none',
+            boxSizing: 'border-box' // Thêm cái này để padding không làm tăng tổng chiều rộng
         }}>
             
             {/* --- KHU VỰC 1: LOGO + MENU --- */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '30px', minWidth: '300px' }}>
-                <Link to="/" style={{ color: '#e50914', textDecoration: 'none', fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px' }}>
-                    F&M
-                </Link>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '30px', flexShrink: 0 }}>
+            <Link to="/" style={{ color: '#e50914', textDecoration: 'none', fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px' }}>
+                F&M
+            </Link>
                 
                 <div style={{ display: 'flex', gap: '25px', alignItems: 'center' }}>
                     <Link to="/movies" className="nav-link">Phim</Link>
@@ -186,7 +185,7 @@ function Navigation() {
                                     <h4 style={{ color: '#e50914', margin: '0 0 10px 0', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🎬 PHIM</h4>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         {staticGenres.movieGenres.map((g, idx) => (
-                                            <div key={idx} onClick={() => handleGenreClick(g)} className="genre-item">
+                                           <div key={idx} onClick={() => handleGenreClick(g, 'movie')} className="genre-item">
                                                 {g}
                                             </div>
                                         ))}
@@ -198,7 +197,7 @@ function Navigation() {
                                     <h4 style={{ color: '#1db954', margin: '0 0 10px 0', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🎵 NHẠC</h4>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         {staticGenres.songGenres.map((g, idx) => (
-                                            <div key={idx} onClick={() => handleGenreClick(g)} className="genre-item">
+                                            <div key={idx} onClick={() => handleGenreClick(g, 'song')} className="genre-item">
                                                 {g}
                                             </div>
                                         ))}
@@ -211,24 +210,28 @@ function Navigation() {
             </div>
 
             {/* --- KHU VỰC 2: SEARCH BAR (GỌI API KÉP) --- */}
-            <div ref={searchRef} style={{ flex: 1, maxWidth: '500px', position: 'relative', marginTop: '3px', marginLeft: '200px' }}>
-                <form onSubmit={handleSearchSubmit} style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
+            <div ref={searchRef} style={{ flex: 1, maxWidth: '600px', position: 'relative', margin: '0 30px' }}>
+                 <form onSubmit={handleSearchSubmit} style={{ width: '100%' }}>
                     <input 
-                        type="text" placeholder="Tìm phim hoặc bài hát..." value={keyword}
+                        type="text" 
+                        placeholder="Tìm phim hoặc bài hát..." 
+                        value={keyword}
                         onChange={handleInputChange} 
                         onFocus={() => keyword && suggestions.length > 0 && setShowSearchDropdown(true)}
                         style={{ 
-                            width: '100%', padding: '0 15px', height: '40px',
-                            background: '#121212', border: '1px solid #333', borderRight: 'none',
-                            color: 'white', borderRadius: '20px 0 0 20px', outline: 'none', fontSize: '1rem', boxSizing: 'border-box'
+                            width: '100%', 
+                            padding: '0 20px', // Tăng padding trái/phải lên một chút
+                            height: '40px',
+                            background: '#222', // Có thể đổi màu nền sáng hơn một chút (ví dụ #222)
+                            border: '1px solid #333', 
+                            /* XÓA bỏ borderRight: 'none' */
+                            color: 'white', 
+                            borderRadius: '20px', // ĐỔI TỪ '20px 0 0 20px' THÀNH '20px' (bo tròn đều)
+                            outline: 'none', 
+                            fontSize: '1rem', 
+                            boxSizing: 'border-box'
                         }}
                     />
-                    <button type="submit" style={{ 
-                        width: '60px', height: '40px', background: '#222', 
-                        border: '1px solid #333', borderRadius: '0 20px 20px 0', 
-                        color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '1.2rem', padding: 0, boxSizing: 'border-box'
-                    }}>🔍</button>
                 </form>
 
                 {/* Dropdown Gợi ý Từ API */}
@@ -259,10 +262,10 @@ function Navigation() {
                     </div>
                 )}
             </div>
-            <div style={{ minWidth: '300px' }}></div>
+           
            
             {/* Nút login / signup */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginRight: '50px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}>
                 {user ? (
                     <>
                         <span style={{ color: 'white', fontWeight: 'bold' }}>Xin chào, {user.fullName}</span>

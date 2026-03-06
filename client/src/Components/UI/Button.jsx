@@ -1,15 +1,15 @@
-// client/src/components/ui/Button.jsx
 import React from 'react';
-import { Link } from 'react-router-dom';
 
-// variant: 'primary' (đỏ), 'music' (xanh), 'glass' (kính)
-const Button = ({ children, onClick, variant = 'primary', style }) => {
+// Nhận thêm prop `icon` và `type` (mặc định là primary)
+const Button = ({ children, onClick, type = 'primary', icon, style }) => {
   return (
     <button 
-      className={`btn-ui btn-${variant}`} 
+      className={`btn-ui btn-${type}`} 
       onClick={onClick}
       style={style}
     >
+      {/* Nếu có truyền icon thì sẽ hiển thị icon ở đây */}
+      {icon && <span style={{ display: 'flex', alignItems: 'center', fontSize: '1.2rem' }}>{icon}</span>}
       {children}
     </button>
   );

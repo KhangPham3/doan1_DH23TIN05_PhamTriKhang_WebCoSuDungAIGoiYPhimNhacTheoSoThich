@@ -6,7 +6,8 @@ function SearchPage() {
     const query = searchParams.get('q'); // Lấy từ khóa từ URL
     const [results, setResults] = useState({ movies: [], songs: [] });
     const [loading, setLoading] = useState(false);
-
+    const searchType = searchParams.get('type');
+    
     useEffect(() => {
         if (query) {
             setLoading(true);
