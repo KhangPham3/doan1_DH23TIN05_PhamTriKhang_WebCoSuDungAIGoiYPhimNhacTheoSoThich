@@ -1,186 +1,156 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../Components/UI/Card';
 import { API_KEY, BASE_URL, IMAGE_URL } from '../API/tmdbAPI';
-import { fetchSongDetailAI, fetchMusicCharts } from '../API/MusicAPI';
+import { fetchSongDetailAI } from '../API/MusicAPI';
 
 const RecommendPage = () => {
-    const [aiMovies, setAiMovies] = useState([]);
-    const [aiSongs, setAiSongs] = useState([]);
-    const [trendingMovies, setTrendingMovies] = useState([]);
-    const [trendingSongs, setTrendingSongs] = useState([]);
+    const [activeTab, setActiveTab] = useState('movie'); // 'movie' hoặc 'song'
     const [loading, setLoading] = useState(true);
-    
+
+    const [movieData, setMovieData] = useState({ history: [], popular: [], age: [], content_based: [], personalized: [] });
+    const [songData, setSongData] = useState({ history: [], popular: [], age: [], content_based: [], personalized: [] });
+
     const user = JSON.parse(localStorage.getItem('currentUser'));
 
     useEffect(() => {
-        const loadDashboardData = async () => {
+        if (!user || !user.id) return;
+
+        const loadAIData = async () => {
             setLoading(true);
             try {
-                // 1. LẤY DỮ LIỆU TRENDING TOP 10 (LUÔN CHẠY DÙ CÓ ĐĂNG NHẬP HAY KHÔNG)
-                const trendMovieRes = await fetch(`${BASE_URL}/trending/movie/day?api_key=${API_KEY}&language=vi-VN`);
-                const trendMovieData = await trendMovieRes.json();
-                if (trendMovieData.results) {
-                    setTrendingMovies(trendMovieData.results.slice(0, 10));
-                }
+                // Gọi API Phân tích sâu (Tuổi, Giới tính, Lịch sử...)
+                const [mRes, sRes] = await Promise.all([
+                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${user.id}&type=movie`),
+                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${user.id}&type=song`)
+                ]);
+                const mIds = await mRes.json();
+                const sIds = await sRes.json();
 
-                const trendSongData = await fetchMusicCharts();
-                if (Array.isArray(trendSongData)) {
-                    const formattedTrendSongs = trendSongData.slice(0, 10).map(s => ({
-                        id: s.videoId,
-                        title: s.title,
-                        artist: s.artists && s.artists.length > 0 ? s.artists[0].name : 'Unknown',
-                        image: s.thumbnails && s.thumbnails.length > 0 ? s.thumbnails[s.thumbnails.length - 1].url : ''
+                const fetchMovies = async (ids) => {
+                    if (!ids || ids.length === 0) return [];
+                    const p = ids.map(id => fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN`).then(r => r.json()));
+                    const res = await Promise.all(p);
+                    return res.filter(m => m && m.id);
+                };
+
+                const fetchSongs = async (ids) => {
+                    if (!ids || ids.length === 0) return [];
+                    const p = ids.map(id => fetchSongDetailAI(id));
+                    const res = await Promise.all(p);
+                    return res.filter(s => s && s.info).map(s => ({
+                        id: s.info.videoDetails.videoId,
+                        title: s.info.videoDetails.title,
+                        artist: s.info.videoDetails.author,
+                        image: `https://img.youtube.com/vi/${s.info.videoDetails.videoId}/hqdefault.jpg`
                     }));
-                    setTrendingSongs(formattedTrendSongs);
-                }
+                };
 
-                // 2. GỌI API PYTHON ĐỂ LẤY GỢI Ý AI (CHỈ CHẠY KHI ĐÃ ĐĂNG NHẬP)
-                if (user && user.id) {
-                    const [movieIdsRes, songIdsRes] = await Promise.all([
-                        fetch(`http://localhost:8000/api/recommend/movies?userId=${user.id}`),
-                        fetch(`http://localhost:8000/api/recommend/songs?userId=${user.id}`)
-                    ]);
-                    
-                    const movieIds = await movieIdsRes.json();
-                    const songIds = await songIdsRes.json();
+                setMovieData({
+                    history: await fetchMovies(mIds.history),
+                    popular: await fetchMovies(mIds.popular),
+                    age: await fetchMovies(mIds.age),
+                    content_based: await fetchMovies(mIds.content_based), // <--- Dòng mới
+                    personalized: await fetchMovies(mIds.personalized)
+                });
 
-                    if (Array.isArray(movieIds) && movieIds.length > 0) {
-                        const moviePromises = movieIds.map(id => fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN`).then(r => r.json()));
-                        const movieDetails = await Promise.all(moviePromises);
-                        setAiMovies(movieDetails.filter(m => m && !m.success===false && m.id)); 
-                    }
+                setSongData({
+                    history: await fetchSongs(sIds.history),
+                    popular: await fetchSongs(sIds.popular),
+                    age: await fetchSongs(sIds.age),
+                    content_based: await fetchSongs(sIds.content_based), // <--- Dòng mới
+                    personalized: await fetchSongs(sIds.personalized)
+                });
 
-                    if (Array.isArray(songIds) && songIds.length > 0) {
-                        const songPromises = songIds.map(id => fetchSongDetailAI(id));
-                        const songDetailsRaw = await Promise.all(songPromises);
-                        setAiSongs(songDetailsRaw.filter(s => s && s.info).map(s => ({
-                            id: s.info.videoDetails.videoId,
-                            title: s.info.videoDetails.title,
-                            artist: s.info.videoDetails.author,
-                            image: `https://img.youtube.com/vi/${s.info.videoDetails.videoId}/hqdefault.jpg`
-                        })));
-                    }
-                }
             } catch (error) {
-                console.error("Lỗi tải dữ liệu Dashboard:", error);
+                console.error("Lỗi tải AI:", error);
             }
             setLoading(false);
         };
 
-        loadDashboardData();
-    }, []); // 👈 Chỉ để mảng rỗng để không bị lặp vô hạn
+        loadAIData();
+    }, [user?.id]);
+
+    const renderSection = (title, desc, items, type, icon) => {
+        if (!items || items.length === 0) return null; 
+        return (
+            <div style={{ marginTop: '60px' }}>
+                <h2 style={{ color: type === 'movie' ? '#e50914' : '#1db954', marginBottom: '5px', fontSize: '2rem' }}>{icon} {title}</h2>
+                <p style={{ color: '#888', marginBottom: '30px', fontStyle: 'italic', fontSize: '1rem' }}>{desc}</p>
+                <div className="media-grid">
+                    {items.map((i, idx) => (
+                        <div key={i.id || idx} className="animate-fade-up" style={{ animationDelay: `${idx * 0.05}s` }}>
+                            <Card 
+                                id={i.id} type={type} title={i.title}
+                                image={type === 'movie' ? (i.poster_path ? `${IMAGE_URL}${i.poster_path}` : 'https://via.placeholder.com/300x450') : i.image}
+                                subtitle={type === 'movie' ? `⭐ ${i.vote_average?.toFixed(1)}` : i.artist}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    if (!user) return (
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: '#0a0a0a' }}>
+            <h1 style={{ fontSize: '3rem', color: '#00bcd4', marginBottom: '10px' }}>🔐 Yêu cầu đăng nhập</h1>
+            <p style={{ color: '#aaa' }}>Hệ thống AI cần biết bạn là ai để có thể phục vụ tốt nhất.</p>
+        </div>
+    );
 
     return (
-        <div style={{ paddingTop: '30px', paddingBottom: '50px', paddingLeft: '40px', paddingRight: '40px', background: 'transparent' }}>
-            
+        <div style={{ paddingTop: '100px', paddingBottom: '100px', paddingLeft: '5%', paddingRight: '5%', background: '#0a0a0a', minHeight: '100vh' }}>
+            <h1 style={{ color: 'white', borderBottom: '1px solid #333', paddingBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginTop: 0 }}>
+                <span style={{ fontSize: '3rem', textShadow: '0 0 20px rgba(0, 188, 212, 0.8)' }}>✨</span>
+                TRUNG TÂM PHÂN TÍCH AI - <span style={{color: '#00bcd4'}}>{user.fullName.toUpperCase()}</span>
+            </h1>
+
+            {/* TAB CHUYỂN ĐỔI */}
+            <div style={{ display: 'flex', gap: '20px', marginTop: '40px', justifyContent: 'center' }}>
+                <button 
+                    onClick={() => setActiveTab('movie')}
+                    style={{ padding: '12px 40px', fontSize: '1.2rem', fontWeight: 'bold', borderRadius: '30px', cursor: 'pointer', transition: 'all 0.3s', border: activeTab === 'movie' ? 'none' : '1px solid #333', background: activeTab === 'movie' ? 'linear-gradient(45deg, #e50914, #b20710)' : 'rgba(255,255,255,0.05)', color: 'white', boxShadow: activeTab === 'movie' ? '0 5px 20px rgba(229, 9, 20, 0.5)' : 'none' }}
+                >🎬 AI ĐIỆN ẢNH</button>
+                <button 
+                    onClick={() => setActiveTab('song')}
+                    style={{ padding: '12px 40px', fontSize: '1.2rem', fontWeight: 'bold', borderRadius: '30px', cursor: 'pointer', transition: 'all 0.3s', border: activeTab === 'song' ? 'none' : '1px solid #333', background: activeTab === 'song' ? 'linear-gradient(45deg, #1db954, #128c3c)' : 'rgba(255,255,255,0.05)', color: 'white', boxShadow: activeTab === 'song' ? '0 5px 20px rgba(29, 185, 84, 0.5)' : 'none' }}
+                >🎵 AI ÂM NHẠC</button>
+            </div>
+
             {loading ? (
-                <div style={{ textAlign: 'center', marginTop: '50px', color: '#aaa' }}>
-                    <h3>⏳ Hệ thống đang tổng hợp dữ liệu toàn cầu...</h3>
+                <div style={{ textAlign: 'center', marginTop: '100px', color: '#00bcd4' }}>
+                    <div className="modern-spinner" style={{ borderColor: '#00bcd4 transparent #00bcd4 transparent', margin: '0 auto' }}></div>
+                    <h3 style={{ marginTop: '20px', letterSpacing: '2px' }}>ĐANG TRÍCH XUẤT MA TRẬN HÀNH VI...</h3>
                 </div>
             ) : (
-                <>
-                    {/* ================= HÀNG 1: TOP 10 TRENDING (AI CŨNG THẤY) ================= */}
-                    <div style={{ marginTop: '10px' }}>
-                        <h2 style={{ color: '#ffc107', textAlign: 'left', marginBottom: '30px' }}>🔥 BẢNG XẾP HẠNG TOP 10 HÔM NAY</h2>
-                        
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
-                            {/* Cột Phim */}
-                            <div>
-                                <h3 style={{ color: '#e50914', borderBottom: '2px solid #e50914', paddingBottom: '10px', display: 'inline-block' }}>Top 10 Phim</h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
-                                    {trendingMovies.map((m, index) => (
-                                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', background: '#1f1f1f', padding: '10px', borderRadius: '8px', position: 'relative', overflow: 'hidden' }}>
-                                            <div style={{ position: 'absolute', left: '-15px', fontSize: '4rem', fontWeight: '900', color: 'rgba(255,255,255,0.05)', fontStyle: 'italic' }}>{index + 1}</div>
-                                            <h2 style={{ width: '40px', color: index < 3 ? '#ffc107' : '#888', margin: 0, textAlign: 'center', zIndex: 2 }}>#{index + 1}</h2>
-                                            <img src={`${IMAGE_URL}${m.poster_path}`} alt="" style={{ width: '50px', height: '75px', objectFit: 'cover', borderRadius: '4px', margin: '0 15px', zIndex: 2 }} />
-                                            <div style={{ zIndex: 2 }}>
-                                                <div style={{ color: 'white', fontWeight: 'bold' }}>{m.title}</div>
-                                                <div style={{ color: '#aaa', fontSize: '0.8rem' }}>⭐ {m.vote_average?.toFixed(1)} • {m.release_date?.substring(0,4)}</div>
-                                            </div>
-                                            <a href={`/movie/${m.id}`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 }}></a>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Cột Nhạc */}
-                            <div>
-                                <h3 style={{ color: '#1db954', borderBottom: '2px solid #1db954', paddingBottom: '10px', display: 'inline-block' }}>Top 10 Bài Hát</h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
-                                    {trendingSongs.map((s, index) => (
-                                        <div key={s.id} style={{ display: 'flex', alignItems: 'center', background: '#1f1f1f', padding: '10px', borderRadius: '8px', position: 'relative', overflow: 'hidden' }}>
-                                            <div style={{ position: 'absolute', left: '-15px', fontSize: '4rem', fontWeight: '900', color: 'rgba(255,255,255,0.05)', fontStyle: 'italic' }}>{index + 1}</div>
-                                            <h2 style={{ width: '40px', color: index < 3 ? '#ffc107' : '#888', margin: 0, textAlign: 'center', zIndex: 2 }}>#{index + 1}</h2>
-                                            <img src={s.image} alt="" style={{ width: '75px', height: '50px', objectFit: 'cover', borderRadius: '4px', margin: '0 15px', zIndex: 2 }} />
-                                            <div style={{ zIndex: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px' }}>
-                                                <div style={{ color: 'white', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title}</div>
-                                                <div style={{ color: '#aaa', fontSize: '0.8rem' }}>{s.artist}</div>
-                                            </div>
-                                            <a href={`/song/${s.id}`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 }}></a>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ================= KHU VỰC CÁ NHÂN HÓA ================= */}
-                    {user ? (
+                <div style={{ marginTop: '20px' }}>
+                    {activeTab === 'movie' ? (
                         <>
-                            <h1 style={{ color: 'white', borderBottom: '1px solid #333', paddingBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginTop: '80px' }}>
-                                <img src="https://media.giphy.com/media/26n6WvwCRGChtXonm/giphy.gif" alt="AI" style={{ width: '40px', borderRadius: '50%' }} />
-                                DÀNH RIÊNG CHO <span style={{color: '#e50914'}}>{user.fullName.toUpperCase()}</span>
-                            </h1>
-
-                            {/* GỢI Ý PHIM AI */}
-                            <div style={{ marginTop: '40px' }}>
-                                <h2 style={{ color: '#e50914', marginBottom: '5px' }}>🎬 Phim Đề Xuất Dựa Trên Hành Vi Của Bạn</h2>
-                                <p style={{ color: '#888', marginBottom: '20px', fontStyle: 'italic', fontSize: '0.9rem' }}>
-                                    Hệ thống AI phân tích dựa trên thể loại, đạo diễn và các bộ phim bạn đã xem gần đây.
-                                </p>
-                                
-                                {aiMovies.length > 0 ? (
-                                    <div className="media-grid">
-                                        {aiMovies.map(m => (
-                                            <Card key={m.id} id={m.id} type="movie" title={m.title} image={m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450'} subtitle={`⭐ ${m.vote_average?.toFixed(1)}`} />
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div style={{ padding: '20px', background: '#222', borderRadius: '10px', color: '#aaa', border: '1px dashed #444' }}>
-                                        🕵️ Bạn chưa xem đủ phim. Hãy khám phá thêm một vài tác phẩm để AI hiểu rõ sở thích của bạn hơn!
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* GỢI Ý NHẠC AI */}
-                            <div style={{ marginTop: '60px' }}>
-                                <h2 style={{ color: '#1db954', marginBottom: '5px' }}>🎵 Nhạc Bắt Đúng Gu Của Bạn</h2>
-                                <p style={{ color: '#888', marginBottom: '20px', fontStyle: 'italic', fontSize: '0.9rem' }}>
-                                    Được AI tuyển chọn dựa trên giai điệu, ca sĩ và các bài hát bạn đã từng thích.
-                                </p>
-
-                                {aiSongs.length > 0 ? (
-                                    <div className="media-grid">
-                                        {aiSongs.map(s => (
-                                            <Card key={s.id} id={s.id} type="song" title={s.title} image={s.image} subtitle={s.artist} />
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div style={{ padding: '20px', background: '#222', borderRadius: '10px', color: '#aaa', border: '1px dashed #444' }}>
-                                        🎧 Hãy nghe thử vài bài hát để hệ thống tự động định hình gu âm nhạc của bạn!
-                                    </div>
-                                )}
-                            </div>
+                            {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc đánh giá trên 3 sao.", movieData.history, 'movie', '❤️')}
+                            {renderSection("Dành Cho Độ Tuổi Của Bạn", "Xu hướng điện ảnh được thế hệ của bạn quan tâm nhất.", movieData.age, 'movie', '🎓')}
+                            {renderSection("Thịnh Hành Cùng Giới Tính", "Những bộ phim đang làm mưa làm gió trong cộng đồng cùng giới tính với bạn.", movieData.gender, 'movie', '👫')}
+                            {renderSection("Có Thể Bạn Sẽ Thích", "Phân tích AI chuyên sâu (Collaborative Filtering) dựa trên những người dùng có chung gu với bạn.", movieData.personalized, 'movie', '🧠')}
+                            {renderSection("Dành Riêng Theo Sở Thích Mở Rộng", "Gợi ý thông minh dựa vào Thể loại, Tác giả và những từ khóa bạn từng tìm kiếm.", movieData.content_based, 'movie', '🎯')}
                         </>
                     ) : (
-                        <div style={{ textAlign: 'center', padding: '40px', background: '#1a1a1a', borderRadius: '10px', marginTop: '60px', border: '1px dashed #333' }}>
-                            <h2 style={{ color: 'white' }}>🤖 Kích Hoạt Tính Năng Trí Tuệ Nhân Tạo</h2>
-                            <p style={{ color: '#aaa', marginBottom: '20px' }}>Đăng nhập để AI có thể phân tích sở thích và tạo ra danh sách phim/nhạc dành riêng cho bạn.</p>
-                            <a href="/login" style={{ padding: '10px 30px', background: '#e50914', color: 'white', textDecoration: 'none', borderRadius: '30px', fontWeight: 'bold' }}>Đăng Nhập Ngay</a>
-                        </div>
+                        <>
+                            {renderSection("Playlist Yêu Thích", "Những bài hát bạn nghe đi nghe lại hoặc đánh giá cao.", songData.history, 'song', '❤️')}
+                            {renderSection("Giai Điệu Thế Hệ", "Những bản nhạc mang đậm dấu ấn tuổi trẻ của thế hệ bạn.", songData.age, 'song', '🎧')}
+                            {renderSection("Giai Điệu Cùng Giới Tính", "Âm nhạc đang được phái của bạn ưu ái nhất.", songData.gender, 'song', '👫')}
+                            {renderSection("Khám Phá Gu Âm Nhạc Mới", "AI tự động học từ lượt view/like để tìm ra những bài hát hoàn hảo cho bạn.", songData.personalized, 'song', '🧠')}
+                            {renderSection("Dành Riêng Theo Sở Thích Mở Rộng", "Gợi ý thông minh dựa vào Thể loại, Tác giả và những từ khóa bạn từng tìm kiếm.", songData.content_based, 'song', '🎯')}
+                        </>
                     )}
-                </>
+                </div>
             )}
+
+            <style dangerouslySetInnerHTML={{__html: `
+                @keyframes fadeUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
+                .animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+                .animate-fade-up img { border-radius: 15px !important; box-shadow: 0 8px 25px rgba(0,0,0,0.6); }
+                .modern-spinner { width: 60px; height: 60px; border-radius: 50%; border: 4px solid; animation: spin 1s linear infinite; }
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            `}} />
         </div>
     );
 };

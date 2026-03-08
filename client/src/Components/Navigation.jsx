@@ -180,7 +180,7 @@ function Navigation() {
                         <span className="nav-link" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                             Thể loại <small style={{fontSize: '0.6rem'}}>▼</small>
                         </span>
-
+                    
                         {showGenreMenu && (
                             <div style={{
                                     position: 'absolute', top: '40px', left: '-50px',
@@ -217,8 +217,19 @@ function Navigation() {
                                     </div>
                                 </div>
                             </div>
+                            
                         )}
+                        
                     </div>
+                     <Link to="/recommend" className="nav-link" style={{ 
+                                display: 'flex', alignItems: 'center', gap: '8px', 
+                                background: 'linear-gradient(45deg, #00bcd4, #2196f3)', 
+                                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', 
+                                fontWeight: '900', letterSpacing: '1px',
+                                textShadow: '0 0 20px rgba(0, 188, 212, 0.4)' 
+                                }}>
+                                <span style={{ textShadow: 'none', color: '#00bcd4' }}>✨</span> GỢI Ý VỚI AI
+                                </Link>
                 </div>
             </div>
 

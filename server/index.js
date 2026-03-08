@@ -156,21 +156,72 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
-// API Ghi log
+// 1. API Ghi log (Đã thêm cơ chế UPSERT: Chống spam Like và Rating)
 app.post('/api/log-interaction', async (req, res) => {
     try {
         const { userId, itemId, itemType, actionType } = req.body;
         let pool = await sql.connect(dbConfig);
+
+        // NẾU LÀ LIKE / DISLIKE -> Xóa cảm xúc cũ đi trước khi thêm mới
+        if (actionType === 'LIKE' || actionType === 'DISLIKE') {
+            await pool.request()
+                .input('UserID', sql.Int, userId).input('ItemID', sql.NVarChar, itemId).input('ItemType', sql.NVarChar, itemType)
+                .query(`DELETE FROM UserInteractions WHERE UserID=@UserID AND ItemID=@ItemID AND ItemType=@ItemType AND (ActionType='LIKE' OR ActionType='DISLIKE')`);
+        }
+        
+        // NẾU LÀ ĐÁNH GIÁ SAO -> Xóa số sao cũ đi trước khi thêm sao mới
+        if (actionType.startsWith('RATE_')) {
+            await pool.request()
+                .input('UserID', sql.Int, userId).input('ItemID', sql.NVarChar, itemId).input('ItemType', sql.NVarChar, itemType)
+                .query(`DELETE FROM UserInteractions WHERE UserID=@UserID AND ItemID=@ItemID AND ItemType=@ItemType AND ActionType LIKE 'RATE_%'`);
+        }
+
+        // Thêm hành động mới vào
         await pool.request()
             .input('UserID', sql.Int, userId || null)
             .input('ItemID', sql.NVarChar, itemId)
             .input('ItemType', sql.NVarChar, itemType)
             .input('ActionType', sql.NVarChar, actionType)
             .query(`INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType) VALUES (@UserID, @ItemID, @ItemType, @ActionType)`);
+        
         res.status(200).send({ message: 'Log saved' });
     } catch (err) {
         console.error("Lỗi ghi log:", err);
         res.status(500).send({ error: 'Lỗi Server' });
+    }
+});
+
+// 2. TÍNH TOÁN THỐNG KÊ (Đã thêm COALESCE để luôn trả về số 0 thay vì NULL)
+app.get('/api/stats/:itemType/:itemId', async (req, res) => {
+    try {
+        const { itemType, itemId } = req.params;
+        let pool = await sql.connect(dbConfig);
+        
+        const statsQuery = await pool.request()
+            .input('ItemID', sql.NVarChar, itemId)
+            .input('ItemType', sql.NVarChar, itemType)
+            .query(`
+                SELECT 
+                    COALESCE(SUM(CASE WHEN ActionType = 'VIEW' THEN 1 ELSE 0 END), 0) as views,
+                    COALESCE(SUM(CASE WHEN ActionType = 'LIKE' THEN 1 ELSE 0 END), 0) as likes,
+                    COALESCE(SUM(CASE WHEN ActionType = 'DISLIKE' THEN 1 ELSE 0 END), 0) as dislikes,
+                    COALESCE(AVG(CASE WHEN ActionType LIKE 'RATE_%' THEN CAST(SUBSTRING(ActionType, 6, 1) AS FLOAT) ELSE NULL END), 0) as avgRating,
+                    COALESCE(SUM(CASE WHEN ActionType LIKE 'RATE_%' THEN 1 ELSE 0 END), 0) as rateCount
+                FROM UserInteractions
+                WHERE ItemID = @ItemID AND ItemType = @ItemType
+            `);
+        
+        const data = statsQuery.recordset[0];
+        res.json({
+            views: data.views,
+            likes: data.likes,
+            dislikes: data.dislikes,
+            avgRating: data.avgRating ? data.avgRating.toFixed(1) : "0.0",
+            rateCount: data.rateCount
+        });
+    } catch (err) {
+        console.error("Lỗi lấy stats:", err);
+        res.status(500).json({ error: 'Lỗi Server' });
     }
 });
 

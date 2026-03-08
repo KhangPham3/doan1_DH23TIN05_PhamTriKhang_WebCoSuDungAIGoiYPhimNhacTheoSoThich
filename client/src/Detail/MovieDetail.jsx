@@ -116,6 +116,52 @@ function MovieDetail() {
         setVisibleSimilarCount(prevCount => prevCount + 5);
     };
 
+   // STATE LƯU TRỮ
+    const [likeStatus, setLikeStatus] = useState(null); 
+    const [userRating, setUserRating] = useState(0);    
+    const [hoverStar, setHoverStar] = useState(0);
+    const [stats, setStats] = useState({ views: 0, likes: 0, dislikes: 0, avgRating: 0, rateCount: 0 });
+
+    // HÀM LẤY SỐ LIỆU TỪ DB
+    const fetchStats = async () => {
+        try {
+            const res = await fetch(`http://localhost:5000/api/stats/movie/${id}`); // Đối với SongDetail thì đổi 'movie' thành 'song'
+            const data = await res.json();
+            setStats(data);
+        } catch (err) { console.error(err); }
+    };
+
+    // Vừa vào trang là lấy số liệu ngay
+    useEffect(() => {
+        if (id) fetchStats();
+    }, [id]);
+
+    // HÀM CLICK LIKE/DISLIKE
+    const handleLikeStatus = async (status) => {
+        if (!currentUser) { alert("Bạn cần đăng nhập để thả cảm xúc!"); return; }
+        setLikeStatus(status); // Cập nhật màu nút ngay lập tức cho mượt
+        try {
+            await fetch('http://localhost:5000/api/log-interaction', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id, itemId: String(id), itemType: 'movie', actionType: status })
+            });
+            fetchStats(); // 👈 BÍ QUYẾT: GỌI LẠI HÀM NÀY ĐỂ SỐ LƯỢT LIKE NHẢY LÊN
+        } catch (err) { console.error("Lỗi:", err); }
+    };
+
+    // HÀM CLICK ĐÁNH GIÁ SAO
+    const handleRating = async (star) => {
+        if (!currentUser) { alert("Bạn cần đăng nhập để đánh giá!"); return; }
+        setUserRating(star); // Lưu số sao user vừa chọn
+        try {
+            await fetch('http://localhost:5000/api/log-interaction', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id, itemId: String(id), itemType: 'movie', actionType: `RATE_${star}` })
+            });
+            fetchStats(); // 👈 GỌI LẠI ĐỂ CẬP NHẬT ĐIỂM TRUNG BÌNH
+        } catch (err) { console.error("Lỗi:", err); }
+    };
+
     if (!movie) return <div style={{color:'white', textAlign:'center', marginTop: 100}}>⏳ Đang tải chi tiết phim...</div>;
 
     return (
@@ -184,6 +230,54 @@ function MovieDetail() {
                     </div>
                 </div>
             )}
+
+            {/* --- KHU VỰC THỐNG KÊ VÀ TƯƠNG TÁC (MODERN UI) --- */}
+                    <div style={{ background: 'linear-gradient(145deg, #1a1a1a, #121212)', padding: '20px 30px', borderRadius: '15px', marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid #333', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+                        
+                        {/* Dòng 1: Thống kê tổng quan */}
+                        <div style={{ display: 'flex', gap: '30px', color: '#aaa', fontSize: '0.95rem', borderBottom: '1px solid #333', paddingBottom: '15px', flexWrap: 'wrap' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>👁️ <strong style={{color: 'white', fontSize: '1.1rem'}}>{stats.views}</strong> lượt xem</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>❤️ <strong style={{color: '#1db954', fontSize: '1.1rem'}}>{stats.likes}</strong> người thích</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>⭐ <strong style={{color: '#ffc107', fontSize: '1.1rem'}}>{stats.avgRating}</strong>/5 ({stats.rateCount} đánh giá)</span>
+                        </div>
+
+                        {/* Dòng 2: Bảng Điều Khiển Tương Tác */}
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                            
+                            <div style={{ display: 'flex', gap: '15px' }}>
+                                <button 
+                                    onClick={() => handleLikeStatus('LIKE')} 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 25px', borderRadius: '30px', border: likeStatus === 'LIKE' ? 'none' : '1px solid #444', background: likeStatus === 'LIKE' ? 'linear-gradient(45deg, #1db954, #128c3c)' : 'transparent', color: likeStatus === 'LIKE' ? 'white' : '#ccc', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s', boxShadow: likeStatus === 'LIKE' ? '0 5px 15px rgba(29, 185, 84, 0.4)' : 'none' }}
+                                >
+                                    👍 Thích
+                                </button>
+                                <button 
+                                    onClick={() => handleLikeStatus('DISLIKE')} 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 25px', borderRadius: '30px', border: likeStatus === 'DISLIKE' ? 'none' : '1px solid #444', background: likeStatus === 'DISLIKE' ? 'linear-gradient(45deg, #e50914, #b20710)' : 'transparent', color: likeStatus === 'DISLIKE' ? 'white' : '#ccc', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s', boxShadow: likeStatus === 'DISLIKE' ? '0 5px 15px rgba(229, 9, 20, 0.4)' : 'none' }}
+                                >
+                                    👎 Không
+                                </button>
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(0,0,0,0.3)', padding: '10px 20px', borderRadius: '30px' }}>
+                                <span style={{ color: '#ccc', fontWeight: 'bold', fontSize: '0.9rem' }}>Đánh giá của bạn: </span>
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <span 
+                                            key={star} onClick={() => handleRating(star)}
+                                            onMouseEnter={() => setHoverStar(star)} onMouseLeave={() => setHoverStar(0)}
+                                            style={{ 
+                                                color: (hoverStar || userRating) >= star ? '#ffc107' : '#444', 
+                                                cursor: 'pointer', fontSize: '1.8rem', transition: 'all 0.2s', 
+                                                textShadow: (hoverStar || userRating) >= star ? '0 0 15px rgba(255, 193, 7, 0.8)' : 'none', 
+                                                transform: hoverStar === star ? 'scale(1.2)' : 'scale(1)' 
+                                            }}
+                                        >★</span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
             {/* --- KHU VỰC 3: PHIM CÙNG THỂ LOẠI (VỚI NÚT XEM THÊM) --- */}
             {similarMovies.length > 0 && (
