@@ -21,10 +21,16 @@ def search_music():
         return jsonify([])
     
     try:
-        # filter='songs' để chỉ lấy bài hát, bỏ qua video/album rác
+        # Bước 1: Thử tìm kiếm chặt chẽ (chỉ lấy Audio chuẩn)
         results = yt.search(query, filter='songs')
+        
+        # Bước 2: NẾU KHÔNG TÌM THẤY (Mảng rỗng) -> Tìm kiếm lỏng lẻo (Lấy cả Video, Remix...)
+        if not results or len(results) == 0:
+            results = yt.search(query)
+            
         return jsonify(results)
     except Exception as e:
+        print(f"Lỗi tìm nhạc: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 2. API Lấy chi tiết bài hát & Lời bài hát (Nếu có)
@@ -157,3 +163,93 @@ def recommend_songs():
 if __name__ == '__main__':
     print("🤖 AI & Music Server running on http://localhost:8000")
     app.run(port=8000, debug=True)
+
+
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+import pyodbc
+
+# API Dashboard Khám phá: Trả về cùng lúc 4 nhóm dữ liệu
+@app.route('/api/recommend/dashboard', methods=['GET'])
+def recommend_dashboard():
+    user_id = int(request.args.get('userId', 0))
+    item_type = request.args.get('type', 'movie') # 'movie' hoặc 'song'
+    
+    try:
+        conn = pyodbc.connect(
+            'DRIVER={ODBC Driver 17 for SQL Server};'
+            'SERVER=localhost;'
+            'DATABASE=RecommenderDB;'
+            'UID=ADMIN;PWD=KhangPham2005'
+        )
+        # Lấy Tương tác + Năm sinh của User
+        query = f"""
+            SELECT UI.UserID, UI.ItemID, UI.ActionType, U.BirthYear 
+            FROM UserInteractions UI
+            JOIN Users U ON UI.UserID = U.UserID
+            WHERE UI.ItemType = '{item_type}'
+        """
+        df = pd.read_sql(query, conn)
+        conn.close()
+
+        if df.empty:
+            return jsonify({"history": [], "popular": [], "age": [], "personalized": []})
+
+        # CHUYỂN ĐỔI HÀNH ĐỘNG SANG ĐIỂM SỐ (RATING)
+        def get_rating(x):
+            if x == 'LIKE': return 5
+            if x == 'DISLIKE': return -1
+            if str(x).startswith('RATE_'): 
+                try: return int(x.split('_')[1]) # Cắt lấy số sao (vd RATE_4 -> 4)
+                except: return 0
+            return 1 # VIEW
+
+        df['Rating'] = df['ActionType'].apply(get_rating)
+
+        # 1. HISTORY (Tác phẩm bạn đã Thích / Đánh giá >= 3 sao)
+        user_df = df[(df['UserID'] == user_id) & (df['Rating'] >= 3)]
+        history_items = user_df.groupby('ItemID')['Rating'].max().sort_values(ascending=False).index.tolist()[:10]
+
+        # 2. POPULAR (Cộng đồng xem nhiều và đánh giá cao)
+        stats = df.groupby('ItemID')['Rating'].agg(['mean', 'count'])
+        # Yêu cầu: Trung bình sao cao và phải có nhiều hơn 1 người tương tác
+        popular_items = stats[stats['count'] > 0].sort_values(by=['mean', 'count'], ascending=False).index.tolist()[:10]
+
+        # 3. AGE BASED (Gợi ý theo độ tuổi: Cùng thế hệ +- 5 tuổi)
+        age_items = []
+        user_birth = df[df['UserID'] == user_id]['BirthYear'].max() if user_id in df['UserID'].values else None
+        if pd.notna(user_birth):
+            age_df = df[(df['BirthYear'] >= user_birth - 5) & (df['BirthYear'] <= user_birth + 5) & (df['UserID'] != user_id)]
+            age_stats = age_df.groupby('ItemID')['Rating'].agg(['mean', 'count'])
+            age_items = age_stats[age_stats['count'] > 0].sort_values(by=['mean', 'count'], ascending=False).index.tolist()[:10]
+
+        # 4. PERSONALIZED (AI Collaborative Filtering - Cá nhân hóa)
+        personalized_items = []
+        user_item_matrix = df.pivot_table(index='UserID', columns='ItemID', values='Rating', aggfunc='max').fillna(0)
+        if user_id in user_item_matrix.index:
+            user_similarity = cosine_similarity(user_item_matrix)
+            user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
+            similar_users = user_similarity_df[user_id].sort_values(ascending=False).index[1:]
+            
+            suggested = {}
+            watched = set(user_item_matrix.loc[user_id][user_item_matrix.loc[user_id] > 0].index)
+            
+            for other_user in similar_users:
+                other_ratings = user_item_matrix.loc[other_user]
+                liked = other_ratings[other_ratings >= 3].index # Tìm người có gu giống và đánh giá >3 sao
+                for item in liked:
+                    if item not in watched:
+                        suggested[item] = suggested.get(item, 0) + user_similarity_df[user_id][other_user]
+                if len(suggested) >= 10: break
+                
+            personalized_items = [item[0] for item in sorted(suggested.items(), key=lambda x: x[1], reverse=True)[:10]]
+
+        return jsonify({
+            "history": [str(x) for x in history_items],
+            "popular": [str(x) for x in popular_items],
+            "age": [str(x) for x in age_items],
+            "personalized": [str(x) for x in personalized_items]
+        })
+    except Exception as e:
+        print(f"Lỗi AI Dashboard: {e}")
+        return jsonify({"history": [], "popular": [], "age": [], "personalized": []})
