@@ -27,7 +27,7 @@ const SongDetail = () => {
             if (result && result.related) {
                 const formattedRelated = result.related
                     .filter(s => s.videoId && s.videoId !== id) // Loại bỏ bài đang phát
-                    .slice(0, 5) // Lấy 5 bài đầu tiên cho đẹp 1 hàng
+                    .slice(0, 10) 
                     .map(s => ({
                         id: s.videoId,
                         title: s.title,
@@ -50,7 +50,7 @@ const SongDetail = () => {
                 
                 if (Array.isArray(songIds) && songIds.length > 0) {
                     // Lọc bỏ bài hát hiện tại khỏi danh sách gợi ý AI
-                    const filteredIds = songIds.filter(sid => sid !== id).slice(0, 5);
+                    const filteredIds = songIds.filter(sid => sid !== id).slice(0, 10);
                     
                     // Dịch ID thành thông tin bài hát
                     const promises = filteredIds.map(sid => fetchSongDetailAI(sid));
@@ -252,8 +252,8 @@ const SongDetail = () => {
             {/* 👇 HÀNG 2: AI TỰ ĐỘNG GỢI Ý DỰA TRÊN LƯỢT VIEW/LIKE */}
             {currentUser && aiRecommendedSongs.length > 0 && (
                 <div style={{ padding: '0 10%', marginTop: '60px' }}>
-                    <h3 style={{ color: '#e50914', borderBottom: '1px solid #333', paddingBottom: '10px', marginBottom: '20px' }}>
-                        ✨ AI Gợi ý dựa trên sở thích của bạn
+                    <h3 style={{ color: '#1db954', borderBottom: '1px solid #333', paddingBottom: '10px', marginBottom: '20px' }}>
+                        ✨ Dựa trên sở thích của bạn
                     </h3>
                     <div className="media-grid">
                         {aiRecommendedSongs.map(s => (

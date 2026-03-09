@@ -48,21 +48,32 @@ export const searchMovies = async (keyword) => {
 
 // ... (Các code cũ giữ nguyên)
 
-// 4. Hàm LỌC PHIM NÂNG CAO (Discover)
-export const discoverMovies = async (filters = {}) => {
+// 4. Hàm LỌC PHIM NÂNG CAO (Đã thêm chặn phim tương lai & Lấy nhiều trang)
+export const discoverMovies = async (filters = {}, pagesToFetch = 3) => {
     try {
         const { sortBy, withGenres, releaseYear, region } = filters;
         
-        let url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=vi-VN&page=1`;
+        let baseUrl = `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=vi-VN`;
         
-        if (sortBy) url += `&sort_by=${sortBy}`;
-        if (withGenres) url += `&with_genres=${withGenres}`;
-        if (releaseYear) url += `&primary_release_year=${releaseYear}`;
-        if (region) url += `&region=${region}`;
+        if (sortBy) baseUrl += `&sort_by=${sortBy}`;
+        if (withGenres) baseUrl += `&with_genres=${withGenres}`;
+        if (releaseYear) baseUrl += `&primary_release_year=${releaseYear}`;
+        if (region) baseUrl += `&region=${region}`;
 
-        const response = await fetch(url);
-        const data = await response.json();
-        return data.results || [];
+        // 🟢 NÂNG CẤP: Nếu người dùng chọn "Mới nhất", chặn các phim chưa ra mắt
+        if (sortBy === 'primary_release_date.desc') {
+            const today = new Date().toISOString().split('T')[0]; // Lấy ngày hôm nay (VD: 2026-03-09)
+            baseUrl += `&primary_release_date.lte=${today}`; // lte: Less than or equal to (Nhỏ hơn hoặc bằng)
+        }
+
+        // 🟢 NÂNG CẤP: Lấy nhiều trang (VD: 3 trang = 60 phim) cùng lúc thay vì chỉ 20 phim
+        const requests = [];
+        for (let i = 1; i <= pagesToFetch; i++) {
+            requests.push(fetch(`${baseUrl}&page=${i}`).then(res => res.json()));
+        }
+        
+        const results = await Promise.all(requests);
+        return results.flatMap(data => data.results || []);
     } catch (error) {
         console.error("Lỗi lọc phim:", error);
         return [];

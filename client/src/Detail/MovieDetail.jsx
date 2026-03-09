@@ -85,16 +85,12 @@ function MovieDetail() {
                 const movieIds = await res.json();
                 
                 if (Array.isArray(movieIds) && movieIds.length > 0) {
-                    // Loại bỏ ID của phim hiện tại (không gợi ý lại chính nó)
-                    const filteredIds = movieIds.filter(mid => sidToString(mid) !== id).slice(0, 5);
-                    
-                    // Dịch ID ra dữ liệu TMDB
+                    const filteredIds = movieIds.filter(mid => sidToString(mid) !== id).slice(0, 10);
                     const promises = filteredIds.map(mid => 
                         fetch(`${BASE_URL}/movie/${mid}?api_key=${API_KEY}&language=vi-VN`).then(r => r.json())
                     );
                     const detailsRaw = await Promise.all(promises);
-                    
-                    setAiRecommendedMovies(detailsRaw.filter(m => m && !m.success===false && m.id));
+                    setAiRecommendedMovies(detailsRaw.filter(m => m && m.id));
                 }
             } catch (err) {
                 console.error("Lỗi lấy AI:", err);
@@ -102,14 +98,14 @@ function MovieDetail() {
             setLoadingAI(false);
         };
 
-        // Hàm helper để convert ID cho chắc (đề phòng Python trả về dạng int)
+       
         const sidToString = (val) => val ? String(val) : '';
 
         if (id) {
             fetchDetail();
             fetchAIRecommendations();
         }
-    }, [id]); // Bỏ currentUser ra khỏi dependency để tránh loop
+    }, [id]); 
 
     // Hàm xử lý "Xem thêm" phim liên quan
     const handleLoadMoreSimilar = () => {

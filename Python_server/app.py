@@ -1,255 +1,178 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ytmusicapi import YTMusic
-
-#Thư viện cho AI dựa vào user interaction
 import pyodbc
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
+import requests
 
 app = Flask(__name__)
-CORS(app) # Cho phép mọi nguồn gọi vào (React)
+CORS(app) 
 
-# Khởi tạo thư viện YouTube Music
 yt = YTMusic()
+TMDB_API_KEY = '46f87255f304cb323c76a53abf325782'
 
-# 1. API Tìm kiếm bài hát
+# ==========================================
+# CÁC API VỀ ÂM NHẠC (YTMUSIC) CƠ BẢN
+# ==========================================
 @app.route('/api/search', methods=['GET'])
 def search_music():
     query = request.args.get('q')
-    if not query:
-        return jsonify([])
-    
+    if not query: return jsonify([])
     try:
-        # Bước 1: Thử tìm kiếm chặt chẽ (chỉ lấy Audio chuẩn)
         results = yt.search(query, filter='songs')
-        
-        # Bước 2: NẾU KHÔNG TÌM THẤY (Mảng rỗng) -> Tìm kiếm lỏng lẻo (Lấy cả Video, Remix...)
-        if not results or len(results) == 0:
-            results = yt.search(query)
-            
+        if not results: results = yt.search(query)
         return jsonify(results)
     except Exception as e:
-        print(f"Lỗi tìm nhạc: {e}")
         return jsonify({"error": str(e)}), 500
 
-# 2. API Lấy chi tiết bài hát & Lời bài hát (Nếu có)
 @app.route('/api/song/<video_id>', methods=['GET'])
 def get_song_detail(video_id):
     try:
-        # Lấy thông tin chi tiết
         song_info = yt.get_song(video_id)
-        
-        # Lấy lời bài hát (Nếu có browseId của lyrics)
-        lyrics = None
         watch_playlist = yt.get_watch_playlist(videoId=video_id)
+        lyrics = None
         if 'lyrics' in watch_playlist and watch_playlist['lyrics']:
-            lyrics_id = watch_playlist['lyrics']
-            lyrics_data = yt.get_lyrics(lyrics_id)
+            lyrics_data = yt.get_lyrics(watch_playlist['lyrics'])
             lyrics = lyrics_data['lyrics'] if lyrics_data else "Không tìm thấy lời"
-
-        return jsonify({
-            "info": song_info,
-            "lyrics": lyrics,
-            "related": watch_playlist.get('tracks', [])[:5] # Lấy 5 bài liên quan
-        })
+        return jsonify({"info": song_info, "lyrics": lyrics, "related": watch_playlist.get('tracks', [])[:10]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 3. API Lấy Bảng Xếp Hạng (Charts)
 @app.route('/api/charts', methods=['GET'])
 def get_charts():
     try:
-        # 1. Tăng limit lên 100 bài
-        # 2. Dùng từ khóa "Vietnam" để lấy nhạc Việt hot
-        results = yt.search("Nhạc Trẻ Remix Vietnam Top Hits", filter='songs', limit=100)
-        
-        # Lọc bớt kết quả lỗi (không có videoId)
-        clean_results = [s for s in results if 'videoId' in s]
-        
-        return jsonify(clean_results)
-    except Exception as e:
-        print(f"Lỗi Python: {e}")
-        return jsonify([])
-
-if __name__ == '__main__':
-    # Chạy server Python ở port 8000 để không đụng port 5000 của Node.js
-    print("🎵 Music Server running on http://localhost:8000")
-    app.run(port=8000, debug=True)
-
-
-# 3. API Lấy Bảng Xếp Hạng (Sửa để lấy 50 bài)
-@app.route('/api/charts', methods=['GET'])
-def get_charts():
-    try:
-        # Thêm limit=50 vào hàm search
         results = yt.search("Top Hits Vietnam", filter='songs', limit=50)
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify([s for s in results if 'videoId' in s])
+    except: return jsonify([])
 
-# AI Logic
-def get_ai_recommendations(user_id, item_type='movie'):
-    try:
-        conn = pyodbc.connect(
-            'DRIVER={ODBC Driver 17 for SQL Server};'
-            'SERVER=localhost;'
-            'DATABASE=RecommenderDB;'
-            'UID=ADMIN;PWD=KhangPham2005'
-        )
-        
-        # CHỈ LẤY DỮ LIỆU TƯƠNG TÁC (KHÔNG CẦN JOIN VỚI BẢNG MOVIES/SONGS)
-        query = f"""
-            SELECT UserID, ItemID, 
-            CASE 
-                WHEN ActionType = 'LIKE' THEN 5 
-                WHEN ActionType = 'VIEW' THEN 1 
-                ELSE 0 
-            END as Rating
-            FROM UserInteractions
-            WHERE ItemType = '{item_type}'
-        """
-        df = pd.read_sql(query, conn)
-        conn.close()
-
-        if df.empty: return []
-
-        # Tạo ma trận và tính toán (Giống code trước)
-        user_item_matrix = df.pivot_table(index='UserID', columns='ItemID', values='Rating', aggfunc='max').fillna(0)
-        
-        if user_id not in user_item_matrix.index: return []
-
-        user_similarity = cosine_similarity(user_item_matrix)
-        user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
-        
-        similar_users = user_similarity_df[user_id].sort_values(ascending=False).index[1:]
-        
-        suggested_items = {}
-        watched_items = set(user_item_matrix.loc[user_id][user_item_matrix.loc[user_id] > 0].index)
-
-        for other_user in similar_users:
-            other_user_ratings = user_item_matrix.loc[other_user]
-            liked_items = other_user_ratings[other_user_ratings >= 3].index
-            
-            for item in liked_items:
-                if item not in watched_items:
-                    suggested_items[item] = suggested_items.get(item, 0) + user_similarity_df[user_id][other_user]
-            
-            if len(suggested_items) >= 10: break
-        
-        sorted_suggestions = sorted(suggested_items.items(), key=lambda x: x[1], reverse=True)
-        
-        # TRẢ VỀ DANH SÁCH ID (Dạng String hoặc Int tùy dữ liệu gốc)
-        return [str(item[0]) for item in sorted_suggestions[:10]]
-
-    except Exception as e:
-        print(f"Lỗi AI: {e}")
-        return []
-    
-# API Endpoint cho React gọi
-@app.route('/api/recommend/movies', methods=['GET'])
-def recommend_movies():
-    user_id = request.args.get('userId')
-    if not user_id: return jsonify([])
-    # Trả về list ID (VD: ["123", "456"])
-    return jsonify(get_ai_recommendations(int(user_id), 'movie'))
-
-@app.route('/api/recommend/songs', methods=['GET'])
-def recommend_songs():
-    user_id = request.args.get('userId')
-    if not user_id: return jsonify([])
-    return jsonify(get_ai_recommendations(int(user_id), 'song'))
-
-if __name__ == '__main__':
-    print("🤖 AI & Music Server running on http://localhost:8000")
-    app.run(port=8000, debug=True)
-
-
-import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
-import pyodbc
-
-# API Dashboard Khám phá: Trả về cùng lúc 4 nhóm dữ liệu
+# ==========================================
+# 🧠 TRUNG TÂM AI (REAL-TIME API FETCHING)
+# ==========================================
 @app.route('/api/recommend/dashboard', methods=['GET'])
 def recommend_dashboard():
     user_id = int(request.args.get('userId', 0))
-    item_type = request.args.get('type', 'movie') # 'movie' hoặc 'song'
+    item_type = request.args.get('type', 'movie') 
     
     try:
-        conn = pyodbc.connect(
-            'DRIVER={ODBC Driver 17 for SQL Server};'
-            'SERVER=localhost;'
-            'DATABASE=RecommenderDB;'
-            'UID=ADMIN;PWD=KhangPham2005'
-        )
-        # Lấy Tương tác + Năm sinh của User
-        query = f"""
-            SELECT UI.UserID, UI.ItemID, UI.ActionType, U.BirthYear 
-            FROM UserInteractions UI
-            JOIN Users U ON UI.UserID = U.UserID
-            WHERE UI.ItemType = '{item_type}'
-        """
+        conn = pyodbc.connect('DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=RecommenderDB;UID=ADMIN;PWD=KhangPham2005')
+        query = f"SELECT UI.UserID, UI.ItemID, UI.ActionType, U.BirthYear, U.Gender FROM UserInteractions UI JOIN Users U ON UI.UserID = U.UserID WHERE UI.ItemType = '{item_type}' OR UI.ItemType = 'mixed' OR UI.ActionType = 'SEARCH'"
         df = pd.read_sql(query, conn)
         conn.close()
 
         if df.empty:
-            return jsonify({"history": [], "popular": [], "age": [], "personalized": []})
+            return jsonify({"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": []})
 
-        # CHUYỂN ĐỔI HÀNH ĐỘNG SANG ĐIỂM SỐ (RATING)
         def get_rating(x):
             if x == 'LIKE': return 5
-            if x == 'DISLIKE': return -1
+            if x == 'DISLIKE': return -2 
+            if x == 'VIEW': return 1.5 
             if str(x).startswith('RATE_'): 
-                try: return int(x.split('_')[1]) # Cắt lấy số sao (vd RATE_4 -> 4)
+                try: return float(x.split('_')[1])
                 except: return 0
-            return 1 # VIEW
+            return 0 
 
         df['Rating'] = df['ActionType'].apply(get_rating)
+        
+        search_df = df[(df['UserID'] == user_id) & (df['ActionType'] == 'SEARCH')]
+        user_searches = search_df['ItemID'].dropna().unique().tolist()[-5:] # Lấy 5 từ khóa gần nhất
+        action_df = df[df['ActionType'] != 'SEARCH']
 
-        # 1. HISTORY (Tác phẩm bạn đã Thích / Đánh giá >= 3 sao)
-        user_df = df[(df['UserID'] == user_id) & (df['Rating'] >= 3)]
-        history_items = user_df.groupby('ItemID')['Rating'].max().sort_values(ascending=False).index.tolist()[:10]
+        user_actions = action_df[(action_df['UserID'] == user_id) & (action_df['Rating'] >= 3)]
+        # TĂNG LÊN 15 PHẦN TỬ
+        history_items = user_actions.groupby('ItemID')['Rating'].max().sort_values(ascending=False).index.tolist()[:15]
+        recent_loved_items = history_items[:5] 
 
-        # 2. POPULAR (Cộng đồng xem nhiều và đánh giá cao)
-        stats = df.groupby('ItemID')['Rating'].agg(['mean', 'count'])
-        # Yêu cầu: Trung bình sao cao và phải có nhiều hơn 1 người tương tác
-        popular_items = stats[stats['count'] > 0].sort_values(by=['mean', 'count'], ascending=False).index.tolist()[:10]
+        stats = action_df.groupby('ItemID')['Rating'].agg(['mean', 'count', 'sum'])
+        popular_items = stats[stats['count'] > 0].sort_values(by=['sum', 'mean'], ascending=False).index.tolist()[:15]
 
-        # 3. AGE BASED (Gợi ý theo độ tuổi: Cùng thế hệ +- 5 tuổi)
-        age_items = []
-        user_birth = df[df['UserID'] == user_id]['BirthYear'].max() if user_id in df['UserID'].values else None
-        if pd.notna(user_birth):
-            age_df = df[(df['BirthYear'] >= user_birth - 5) & (df['BirthYear'] <= user_birth + 5) & (df['UserID'] != user_id)]
-            age_stats = age_df.groupby('ItemID')['Rating'].agg(['mean', 'count'])
-            age_items = age_stats[age_stats['count'] > 0].sort_values(by=['mean', 'count'], ascending=False).index.tolist()[:10]
+        age_items, gender_items = [], []
+        if user_id in action_df['UserID'].values:
+            user_birth = action_df[action_df['UserID'] == user_id]['BirthYear'].max()
+            user_gender = action_df[action_df['UserID'] == user_id]['Gender'].max()
+            
+            if pd.notna(user_birth):
+                age_df = action_df[(action_df['BirthYear'] >= user_birth - 5) & (action_df['BirthYear'] <= user_birth + 5) & (action_df['UserID'] != user_id)]
+                age_items = age_df.groupby('ItemID')['Rating'].agg(['sum']).sort_values(by=['sum'], ascending=False).index.tolist()[:15]
+                
+            if pd.notna(user_gender):
+                gender_df = action_df[(action_df['Gender'] == user_gender) & (action_df['UserID'] != user_id)]
+                gender_items = gender_df.groupby('ItemID')['Rating'].agg(['sum']).sort_values(by=['sum'], ascending=False).index.tolist()[:15]
 
-        # 4. PERSONALIZED (AI Collaborative Filtering - Cá nhân hóa)
+        content_items_set = set()
+        try:
+            if item_type == 'movie':
+                for mid in recent_loved_items:
+                    res = requests.get(f"https://api.themoviedb.org/3/movie/{mid}/recommendations?api_key={TMDB_API_KEY}&language=vi-VN").json()
+                    for m in res.get('results', [])[:8]: content_items_set.add(str(m['id']))
+                for q in user_searches:
+                    res = requests.get(f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&language=vi-VN&query={q}").json()
+                    for m in res.get('results', [])[:5]: content_items_set.add(str(m['id']))
+            else: 
+                for sid in recent_loved_items:
+                    res = yt.get_watch_playlist(videoId=sid, limit=15)
+                    for track in res.get('tracks', []):
+                        if 'videoId' in track and track['videoId'] != sid:
+                            content_items_set.add(track['videoId'])
+                for q in user_searches:
+                    res = yt.search(q, filter='songs', limit=5)
+                    for s in res: 
+                        if 'videoId' in s: content_items_set.add(s['videoId'])
+        except Exception as e:
+            print("Lỗi API ngoại vi:", e)
+
+        # LẤY 15 PHẦN TỬ
+        content_items = list(content_items_set - set(history_items))[:15]
+
         personalized_items = []
-        user_item_matrix = df.pivot_table(index='UserID', columns='ItemID', values='Rating', aggfunc='max').fillna(0)
+        user_item_matrix = action_df.pivot_table(index='UserID', columns='ItemID', values='Rating', aggfunc='max').fillna(0)
         if user_id in user_item_matrix.index:
-            user_similarity = cosine_similarity(user_item_matrix)
-            user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
-            similar_users = user_similarity_df[user_id].sort_values(ascending=False).index[1:]
+            user_sim = cosine_similarity(user_item_matrix)
+            user_sim_df = pd.DataFrame(user_sim, index=user_item_matrix.index, columns=user_item_matrix.index)
+            similar_users = user_sim_df[user_id].sort_values(ascending=False).index[1:]
             
             suggested = {}
             watched = set(user_item_matrix.loc[user_id][user_item_matrix.loc[user_id] > 0].index)
-            
             for other_user in similar_users:
                 other_ratings = user_item_matrix.loc[other_user]
-                liked = other_ratings[other_ratings >= 3].index # Tìm người có gu giống và đánh giá >3 sao
+                liked = other_ratings[other_ratings >= 3].index
                 for item in liked:
                     if item not in watched:
-                        suggested[item] = suggested.get(item, 0) + user_similarity_df[user_id][other_user]
-                if len(suggested) >= 10: break
-                
-            personalized_items = [item[0] for item in sorted(suggested.items(), key=lambda x: x[1], reverse=True)[:10]]
+                        suggested[item] = suggested.get(item, 0) + user_sim_df[user_id][other_user]
+                if len(suggested) >= 20: break
+            # LẤY 15 PHẦN TỬ
+            personalized_items = [item[0] for item in sorted(suggested.items(), key=lambda x: x[1], reverse=True)[:15]]
 
         return jsonify({
             "history": [str(x) for x in history_items],
             "popular": [str(x) for x in popular_items],
             "age": [str(x) for x in age_items],
+            "gender": [str(x) for x in gender_items],
+            "content_based": [str(x) for x in content_items],
             "personalized": [str(x) for x in personalized_items]
         })
     except Exception as e:
-        print(f"Lỗi AI Dashboard: {e}")
-        return jsonify({"history": [], "popular": [], "age": [], "personalized": []})
+        print(f"Lỗi Hệ Thống AI: {e}")
+        return jsonify({"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": []})
+
+# THUẬT TOÁN FALLBACK CHỐNG TRỐNG DỮ LIỆU
+@app.route('/api/recommend/movies', methods=['GET'])
+def recommend_movies():
+    user_id = request.args.get('userId')
+    if not user_id: return jsonify([])
+    res = requests.get(f'http://localhost:8000/api/recommend/dashboard?userId={user_id}&type=movie').json()
+    # Gộp tất cả: Cá nhân hóa + Content Based + Popular (Để đảm bảo luôn có đủ 15 phim)
+    final_list = list(dict.fromkeys(res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
+    return jsonify(final_list[:15])
+
+@app.route('/api/recommend/songs', methods=['GET'])
+def recommend_songs():
+    user_id = request.args.get('userId')
+    if not user_id: return jsonify([])
+    res = requests.get(f'http://localhost:8000/api/recommend/dashboard?userId={user_id}&type=song').json()
+    # Gộp tất cả: Cá nhân hóa + Content Based + Popular (Để đảm bảo luôn có đủ 15 bài hát)
+    final_list = list(dict.fromkeys(res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
+    return jsonify(final_list[:15])
+
+if __name__ == '__main__':
+    app.run(port=8000, debug=True)

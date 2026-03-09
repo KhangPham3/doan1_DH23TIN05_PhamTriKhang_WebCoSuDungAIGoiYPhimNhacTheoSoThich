@@ -10,13 +10,13 @@
   --text-gray: #b3b3b3;
   --gradient-dark: linear-gradient(180deg, rgba(20,20,20,0) 0%, rgba(20,20,20,1) 100%);
   --shadow-glow: 0 0 20px rgba(0,0,0,0.5);
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
 body {
   background-color: var(--bg-main);
   color: var(--text-white);
-  font-family: 'Montserrat', sans-serif; /* Font chữ sang trọng hơn */
-  margin: 0;
+  font-family: 'Inter', 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;  margin: 0;
   overflow-x: hidden;
 }
 

@@ -129,6 +129,35 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// 3. API QUÊN MẬT KHẨU (Reset Password)
+app.post('/api/forgot-password', async (req, res) => {
+    const { username, email, newPassword } = req.body;
+    try {
+        let pool = await sql.connect(dbConfig);
+
+        // Kiểm tra xem Username và Email có khớp trong CSDL không
+        const checkUser = await pool.request()
+            .input('Username', sql.VarChar, username)
+            .input('Email', sql.VarChar, email)
+            .query("SELECT * FROM Users WHERE Username = @Username AND Email = @Email");
+
+        if (checkUser.recordset.length === 0) {
+            return res.status(400).json({ success: false, message: "Tên đăng nhập hoặc Email không chính xác!" });
+        }
+
+        // Nếu khớp, tiến hành cập nhật mật khẩu mới
+        await pool.request()
+            .input('Username', sql.VarChar, username)
+            .input('NewPassword', sql.VarChar, newPassword)
+            .query("UPDATE Users SET PasswordHash = @NewPassword WHERE Username = @Username");
+
+        res.json({ success: true, message: "Đổi mật khẩu thành công! Bạn có thể đăng nhập ngay." });
+    } catch (err) {
+        console.error("Lỗi Quên Mật Khẩu:", err);
+        res.status(500).json({ success: false, message: "Lỗi Server" });
+    }
+});
+
 // ==========================================
 // CÁC API KHÁC (Search, Movies, Logs...)
 // ==========================================

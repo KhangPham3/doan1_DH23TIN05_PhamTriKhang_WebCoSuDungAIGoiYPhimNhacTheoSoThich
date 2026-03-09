@@ -49,7 +49,7 @@ const RecommendPage = () => {
                     history: await fetchMovies(mIds.history),
                     popular: await fetchMovies(mIds.popular),
                     age: await fetchMovies(mIds.age),
-                    content_based: await fetchMovies(mIds.content_based), // <--- Dòng mới
+                    content_based: await fetchMovies(mIds.content_based), 
                     personalized: await fetchMovies(mIds.personalized)
                 });
 
@@ -57,7 +57,7 @@ const RecommendPage = () => {
                     history: await fetchSongs(sIds.history),
                     popular: await fetchSongs(sIds.popular),
                     age: await fetchSongs(sIds.age),
-                    content_based: await fetchSongs(sIds.content_based), // <--- Dòng mới
+                    content_based: await fetchSongs(sIds.content_based), 
                     personalized: await fetchSongs(sIds.personalized)
                 });
 
@@ -102,7 +102,7 @@ const RecommendPage = () => {
         <div style={{ paddingTop: '100px', paddingBottom: '100px', paddingLeft: '5%', paddingRight: '5%', background: '#0a0a0a', minHeight: '100vh' }}>
             <h1 style={{ color: 'white', borderBottom: '1px solid #333', paddingBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginTop: 0 }}>
                 <span style={{ fontSize: '3rem', textShadow: '0 0 20px rgba(0, 188, 212, 0.8)' }}>✨</span>
-                TRUNG TÂM PHÂN TÍCH AI - <span style={{color: '#00bcd4'}}>{user.fullName.toUpperCase()}</span>
+                TỔNG HỢP GỢI Ý CHO RIÊNG BẠN
             </h1>
 
             {/* TAB CHUYỂN ĐỔI */}
@@ -110,17 +110,17 @@ const RecommendPage = () => {
                 <button 
                     onClick={() => setActiveTab('movie')}
                     style={{ padding: '12px 40px', fontSize: '1.2rem', fontWeight: 'bold', borderRadius: '30px', cursor: 'pointer', transition: 'all 0.3s', border: activeTab === 'movie' ? 'none' : '1px solid #333', background: activeTab === 'movie' ? 'linear-gradient(45deg, #e50914, #b20710)' : 'rgba(255,255,255,0.05)', color: 'white', boxShadow: activeTab === 'movie' ? '0 5px 20px rgba(229, 9, 20, 0.5)' : 'none' }}
-                >🎬 AI ĐIỆN ẢNH</button>
+                >🎬 ĐIỆN ẢNH</button>
                 <button 
                     onClick={() => setActiveTab('song')}
                     style={{ padding: '12px 40px', fontSize: '1.2rem', fontWeight: 'bold', borderRadius: '30px', cursor: 'pointer', transition: 'all 0.3s', border: activeTab === 'song' ? 'none' : '1px solid #333', background: activeTab === 'song' ? 'linear-gradient(45deg, #1db954, #128c3c)' : 'rgba(255,255,255,0.05)', color: 'white', boxShadow: activeTab === 'song' ? '0 5px 20px rgba(29, 185, 84, 0.5)' : 'none' }}
-                >🎵 AI ÂM NHẠC</button>
+                >🎵 ÂM NHẠC</button>
             </div>
 
             {loading ? (
                 <div style={{ textAlign: 'center', marginTop: '100px', color: '#00bcd4' }}>
                     <div className="modern-spinner" style={{ borderColor: '#00bcd4 transparent #00bcd4 transparent', margin: '0 auto' }}></div>
-                    <h3 style={{ marginTop: '20px', letterSpacing: '2px' }}>ĐANG TRÍCH XUẤT MA TRẬN HÀNH VI...</h3>
+                    <h3 style={{ marginTop: '20px', letterSpacing: '2px' }}>ĐANG TẢI DỮ LIỆU...</h3>
                 </div>
             ) : (
                 <div style={{ marginTop: '20px' }}>
