@@ -254,6 +254,77 @@ app.get('/api/stats/:itemType/:itemId', async (req, res) => {
     }
 });
 
+// API LẤY LỊCH SỬ XEM CỦA NGƯỜI DÙNG (HISTORY)
+app.get('/api/history/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        let pool = await sql.connect(dbConfig);
+        
+        // Lấy tất cả các ItemID mà user đã 'VIEW', sắp xếp mới nhất lên đầu
+        const historyQuery = await pool.request()
+            .input('UserID', sql.Int, userId)
+            .query(`
+                SELECT ItemID, ItemType, MAX(CreatedAt) as LastViewed
+                FROM UserInteractions
+                WHERE UserID = @UserID AND ActionType = 'VIEW'
+                GROUP BY ItemID, ItemType
+                ORDER BY LastViewed DESC
+            `);
+            
+        res.json(historyQuery.recordset);
+    } catch (err) {
+        console.error("Lỗi lấy lịch sử:", err);
+        res.status(500).json({ error: 'Lỗi Server' });
+    }
+});
+
+// ==========================================
+// API XÓA LỊCH SỬ (HISTORY)
+// ==========================================
+
+// 1. Xóa 1 mục cụ thể
+app.delete('/api/history/:userId/:itemType/:itemId', async (req, res) => {
+    try {
+        const { userId, itemType, itemId } = req.params;
+        let pool = await sql.connect(dbConfig);
+        
+        await pool.request()
+            .input('UserID', sql.Int, userId)
+            .input('ItemType', sql.NVarChar, itemType)
+            .input('ItemID', sql.NVarChar, itemId)
+            .query(`
+                DELETE FROM UserInteractions 
+                WHERE UserID = @UserID AND ItemType = @ItemType AND ItemID = @ItemID AND ActionType = 'VIEW'
+            `);
+            
+        res.json({ success: true, message: "Đã xóa khỏi lịch sử" });
+    } catch (err) {
+        console.error("Lỗi xóa 1 mục lịch sử:", err);
+        res.status(500).json({ success: false, message: "Lỗi Server" });
+    }
+});
+
+// 2. Xóa toàn bộ lịch sử (theo loại hoặc tất cả)
+app.delete('/api/history/:userId/:itemType/all', async (req, res) => {
+    try {
+        const { userId, itemType } = req.params;
+        let pool = await sql.connect(dbConfig);
+        
+        await pool.request()
+            .input('UserID', sql.Int, userId)
+            .input('ItemType', sql.NVarChar, itemType)
+            .query(`
+                DELETE FROM UserInteractions 
+                WHERE UserID = @UserID AND ItemType = @ItemType AND ActionType = 'VIEW'
+            `);
+            
+        res.json({ success: true, message: "Đã xóa toàn bộ lịch sử" });
+    } catch (err) {
+        console.error("Lỗi xóa toàn bộ lịch sử:", err);
+        res.status(500).json({ success: false, message: "Lỗi Server" });
+    }
+});
+
 // ==========================================
 // KHỞI CHẠY SERVER (LUÔN ĐỂ CUỐI CÙNG)
 // ==========================================

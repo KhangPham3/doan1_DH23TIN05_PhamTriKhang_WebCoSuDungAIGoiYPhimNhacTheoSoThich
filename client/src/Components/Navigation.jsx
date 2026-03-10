@@ -165,13 +165,15 @@ function Navigation() {
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '30px', flexShrink: 0 }}>
                 <Link to="/" style={{ color: '#e50914', textDecoration: 'none', fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px' }}>
-                    F&M
+                    F&S
                 </Link>
                 
                 <div style={{ display: 'flex', gap: '25px', alignItems: 'center' }}>
                     <Link to="/movies" className="nav-link">Phim</Link>
                     <Link to="/songs" className="nav-link">Nhạc</Link>
+                    <Link to="/history" className="nav-link">Lịch sử</Link>
 
+                    
                     <div 
                         style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center' }}
                         onMouseEnter={handleGenreMouseEnter}
@@ -216,20 +218,22 @@ function Navigation() {
                                         ))}
                                     </div>
                                 </div>
+                                <Link to="/recommend" className="nav-link" style={{ 
+                                display: 'flex', alignItems: 'center', gap: '8px', 
+                                background: 'linear-gradient(45deg, #00bcd4, #2196f3)', 
+                                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', 
+                                fontWeight: '900', letterSpacing: '1px',
+                                textShadow: '0 0 20px rgba(0, 188, 212, 0.4)',
+                                textAlign: 'center', justifyContent: 'center'
+                                }}>
+                                <span style={{ textShadow: 'none', color: '#00bcd4'}}>✨</span> GỢI Ý VỚI AI
+                                </Link>
                             </div>
                             
                         )}
                         
                     </div>
-                     <Link to="/recommend" className="nav-link" style={{ 
-                                display: 'flex', alignItems: 'center', gap: '8px', 
-                                background: 'linear-gradient(45deg, #00bcd4, #2196f3)', 
-                                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', 
-                                fontWeight: '900', letterSpacing: '1px',
-                                textShadow: '0 0 20px rgba(0, 188, 212, 0.4)' 
-                                }}>
-                                <span style={{ textShadow: 'none', color: '#00bcd4' }}>✨</span> GỢI Ý VỚI AI
-                                </Link>
+
                 </div>
             </div>
 
