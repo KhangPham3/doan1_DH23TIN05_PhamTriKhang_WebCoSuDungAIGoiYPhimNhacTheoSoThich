@@ -1,16 +1,30 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ytmusicapi import YTMusic
-import pyodbc
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import requests
+import urllib.parse
+from sqlalchemy import create_engine, text
 
 app = Flask(__name__)
 CORS(app) 
 
 yt = YTMusic()
 TMDB_API_KEY = '46f87255f304cb323c76a53abf325782'
+
+# ==========================================
+# 🔌 TẠO CONNECTION POOL CHO PYTHON AI (CÁCH BULLETPROOF)
+# ==========================================
+# 1. Dùng lại chính xác chuỗi kết nối đã hoạt động của bạn
+conn_str = "DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=RecommenderDB;UID=ADMIN;PWD=KhangPham2005"
+params = urllib.parse.quote_plus(conn_str)
+
+# 2. Nhúng vào SQLAlchemy URL
+DB_URL = f"mssql+pyodbc:///?odbc_connect={params}"
+
+# 3. Khởi tạo Engine (Pool dùng chung)
+engine = create_engine(DB_URL, pool_size=10, max_overflow=20)
 
 # ==========================================
 # CÁC API VỀ ÂM NHẠC (YTMUSIC) CƠ BẢN
@@ -47,21 +61,23 @@ def get_charts():
     except: return jsonify([])
 
 # ==========================================
-# 🧠 TRUNG TÂM AI (REAL-TIME API FETCHING)
+# 🧠 CORE AI: HÀM XỬ LÝ LÕI
 # ==========================================
-@app.route('/api/recommend/dashboard', methods=['GET'])
-def recommend_dashboard():
-    user_id = int(request.args.get('userId', 0))
-    item_type = request.args.get('type', 'movie') 
-    
+def generate_recommendations(user_id, item_type):
     try:
-        conn = pyodbc.connect('DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=RecommenderDB;UID=ADMIN;PWD=KhangPham2005')
-        query = f"SELECT UI.UserID, UI.ItemID, UI.ActionType, U.BirthYear, U.Gender FROM UserInteractions UI JOIN Users U ON UI.UserID = U.UserID WHERE UI.ItemType = '{item_type}' OR UI.ItemType = 'mixed' OR UI.ActionType = 'SEARCH'"
-        df = pd.read_sql(query, conn)
-        conn.close()
+        user_id = int(user_id)
+    except:
+        user_id = 0
 
-        if df.empty:
-            return jsonify({"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": []})
+    try:
+        query = f"SELECT UI.UserID, UI.ItemID, UI.ActionType, U.BirthYear, U.Gender FROM UserInteractions UI JOIN Users U ON UI.UserID = U.UserID WHERE UI.ItemType = '{item_type}' OR UI.ItemType = 'mixed' OR UI.ActionType = 'SEARCH'"
+        
+        # TỐI ƯU & FIX LỖI: Rút một kết nối an toàn từ Pool, bọc query bằng hàm text(), rồi trả lại Pool
+        with engine.connect() as conn:
+            df = pd.read_sql(text(query), conn)
+
+        empty_result = {"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": []}
+        if df.empty: return empty_result
 
         def get_rating(x):
             if x == 'LIKE': return 5
@@ -75,11 +91,10 @@ def recommend_dashboard():
         df['Rating'] = df['ActionType'].apply(get_rating)
         
         search_df = df[(df['UserID'] == user_id) & (df['ActionType'] == 'SEARCH')]
-        user_searches = search_df['ItemID'].dropna().unique().tolist()[-5:] # Lấy 5 từ khóa gần nhất
+        user_searches = search_df['ItemID'].dropna().unique().tolist()[-5:]
         action_df = df[df['ActionType'] != 'SEARCH']
 
         user_actions = action_df[(action_df['UserID'] == user_id) & (action_df['Rating'] >= 3)]
-        # TĂNG LÊN 15 PHẦN TỬ
         history_items = user_actions.groupby('ItemID')['Rating'].max().sort_values(ascending=False).index.tolist()[:15]
         recent_loved_items = history_items[:5] 
 
@@ -121,7 +136,6 @@ def recommend_dashboard():
         except Exception as e:
             print("Lỗi API ngoại vi:", e)
 
-        # LẤY 15 PHẦN TỬ
         content_items = list(content_items_set - set(history_items))[:15]
 
         personalized_items = []
@@ -140,28 +154,37 @@ def recommend_dashboard():
                     if item not in watched:
                         suggested[item] = suggested.get(item, 0) + user_sim_df[user_id][other_user]
                 if len(suggested) >= 20: break
-            # LẤY 15 PHẦN TỬ
             personalized_items = [item[0] for item in sorted(suggested.items(), key=lambda x: x[1], reverse=True)[:15]]
 
-        return jsonify({
+        return {
             "history": [str(x) for x in history_items],
             "popular": [str(x) for x in popular_items],
             "age": [str(x) for x in age_items],
             "gender": [str(x) for x in gender_items],
             "content_based": [str(x) for x in content_items],
             "personalized": [str(x) for x in personalized_items]
-        })
+        }
     except Exception as e:
         print(f"Lỗi Hệ Thống AI: {e}")
-        return jsonify({"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": []})
+        return {"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": []}
 
-# THUẬT TOÁN FALLBACK CHỐNG TRỐNG DỮ LIỆU
+
+# ==========================================
+# CÁC ROUTE API DÙNG CHUNG HÀM LÕI
+# ==========================================
+@app.route('/api/recommend/dashboard', methods=['GET'])
+def recommend_dashboard():
+    user_id = request.args.get('userId', 0)
+    item_type = request.args.get('type', 'movie') 
+    data = generate_recommendations(user_id, item_type)
+    return jsonify(data)
+
 @app.route('/api/recommend/movies', methods=['GET'])
 def recommend_movies():
     user_id = request.args.get('userId')
     if not user_id: return jsonify([])
-    res = requests.get(f'http://localhost:8000/api/recommend/dashboard?userId={user_id}&type=movie').json()
-    # Gộp tất cả: Cá nhân hóa + Content Based + Popular (Để đảm bảo luôn có đủ 15 phim)
+    
+    res = generate_recommendations(user_id, 'movie')
     final_list = list(dict.fromkeys(res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
     return jsonify(final_list[:15])
 
@@ -169,10 +192,12 @@ def recommend_movies():
 def recommend_songs():
     user_id = request.args.get('userId')
     if not user_id: return jsonify([])
-    res = requests.get(f'http://localhost:8000/api/recommend/dashboard?userId={user_id}&type=song').json()
-    # Gộp tất cả: Cá nhân hóa + Content Based + Popular (Để đảm bảo luôn có đủ 15 bài hát)
+    
+    res = generate_recommendations(user_id, 'song')
     final_list = list(dict.fromkeys(res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
     return jsonify(final_list[:15])
 
+
 if __name__ == '__main__':
-    app.run(port=8000, debug=True)
+    print("🚀 Khởi động Server AI nội bộ thành công với SQLAlchemy Pool!")
+    app.run(host='0.0.0.0', port=8000, debug=True, threaded=True)

@@ -100,7 +100,7 @@ const HomePage = () => {
                                             <div className="bg-number">{index + 1}</div>
                                             
                                             <h2 className="rank-number" style={{ color: index < 3 ? '#ffc107' : '#888' }}>#{index + 1}</h2>
-                                            <img src={`${IMAGE_URL}${m.poster_path}`} alt={m.title} className="trending-img" />
+                                            <img src={`${IMAGE_URL}${m.poster_path}`} alt={m.title || "Poster phim"} className="trending-img" loading="lazy" />
                                             
                                             <div className="trending-info">
                                                 <div className="trending-title">{m.title}</div>
@@ -128,7 +128,7 @@ const HomePage = () => {
                                             <div className="bg-number">{index + 1}</div>
                                             
                                             <h2 className="rank-number" style={{ color: index < 3 ? '#ffc107' : '#888' }}>#{index + 1}</h2>
-                                            <img src={s.image} alt={s.title} className="trending-img song-img" />
+                                            <img src={s.image || 'https://via.placeholder.com/80'} alt={s.title || "Ảnh bài hát"} className="trending-img song-img" loading="lazy" />
                                             
                                             <div className="trending-info">
                                                 <div className="trending-title">{s.title}</div>

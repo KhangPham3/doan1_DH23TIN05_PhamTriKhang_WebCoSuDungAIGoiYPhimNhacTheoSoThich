@@ -8,56 +8,50 @@ app.use(express.json());
 
 const PORT = 5000;
 
-// Cấu hình Database
+// 1. Cấu hình Database (Đã thêm requestTimeout để tránh lỗi đứt gánh giữa chừng)
 const dbConfig = {
     user: 'ADMIN', 
     password: 'KhangPham2005', 
     server: 'localhost', 
     port: 1433, 
     database: 'RecommenderDB', 
+    requestTimeout: 30000, 
     options: {
         encrypt: false,
         trustServerCertificate: true,
     }
 };
 
+// 2. TẠO CONNECTION POOL DÙNG CHUNG TỐI ƯU HIỆU SUẤT (KHÔNG MỞ KẾT NỐI LIÊN TỤC)
+const appPool = new sql.ConnectionPool(dbConfig);
+const poolConnect = appPool.connect()
+    .then(() => console.log("✅ Đã kết nối SQL Server thành công với Connection Pool!"))
+    .catch(err => console.log("❌ Lỗi kết nối SQL Server ban đầu:", err));
+
+
 // ==========================================
 // CÁC API NGƯỜI DÙNG (AUTH)
 // ==========================================
 
 // 1. API ĐĂNG KÝ
-// 1. API ĐĂNG KÝ (Register) - Đã thêm Validate năm sinh
 app.post('/api/register', async (req, res) => {
     const { username, password, fullName, email, birthYear, gender } = req.body;
 
-    // --- 👇 LOGIC KIỂM TRA NĂM SINH (MỚI) 👇 ---
-    const currentYear = new Date().getFullYear(); // Lấy năm hiện tại (ví dụ: 2026)
-    const userBirthYear = parseInt(birthYear); // Chuyển đổi sang số nguyên cho chắc chắn
+    const currentYear = new Date().getFullYear();
+    const userBirthYear = parseInt(birthYear); 
 
-    // 1. Kiểm tra nếu nhập năm tương lai hoặc năm hiện tại
     if (userBirthYear >= currentYear) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Năm sinh không hợp lệ!" 
-        });
+        return res.status(400).json({ success: false, message: "Năm sinh không hợp lệ!" });
     }
 
-    // 2. Kiểm tra độ tuổi (Phải >= 16 tuổi)
     if (currentYear - userBirthYear < 16) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Bạn phải từ 16 tuổi trở lên để đăng ký tài khoản!" 
-        });
+        return res.status(400).json({ success: false, message: "Bạn phải từ 16 tuổi trở lên để đăng ký tài khoản!" });
     }   
-    
-    
-        // --- 👆 HẾT PHẦN KIỂM TRA 👆 ---
 
     try {
-        let pool = await sql.connect(dbConfig);
+        await poolConnect; // Chờ pool sẵn sàng
         
-        // Kiểm tra xem user đã tồn tại chưa
-        const checkUser = await pool.request()
+        const checkUser = await appPool.request()
             .input('Username', sql.VarChar(50), username)
             .query("SELECT * FROM Users WHERE Username = @Username");
             
@@ -65,7 +59,7 @@ app.post('/api/register', async (req, res) => {
             return res.status(400).json({ success: false, message: "Tên đăng nhập đã tồn tại!" });
         }
 
-        const checkEmail = await pool.request()
+        const checkEmail = await appPool.request()
             .input('Email', sql.VarChar(100), email)
             .query("SELECT * FROM Users WHERE Email = @Email");
 
@@ -73,15 +67,12 @@ app.post('/api/register', async (req, res) => {
             return res.status(400).json({ success: false, message: "Email đã được sử dụng!" });
         }
 
-
-
-        // Lưu vào SQL
-        await pool.request()
+        await appPool.request()
             .input('Username', sql.VarChar(50), username)
             .input('PasswordHash', sql.VarChar(255), password)
             .input('FullName', sql.NVarChar(100), fullName)
             .input('Email', sql.VarChar(100), email)
-            .input('BirthYear', sql.Int, userBirthYear) // Dùng biến đã parse
+            .input('BirthYear', sql.Int, userBirthYear) 
             .input('Gender', sql.NVarChar(20), gender)
             .query(`
                 INSERT INTO Users (Username, PasswordHash, FullName, Email, BirthYear, Gender)
@@ -91,7 +82,6 @@ app.post('/api/register', async (req, res) => {
         res.json({ success: true, message: "Đăng ký thành công!" });
     } catch (err) {
         console.error("Lỗi Đăng Ký:", err);
-        // Kiểm tra lỗi SQL cụ thể
         if (err.message.includes('Invalid column name')) {
             res.status(500).json({ success: false, message: "Lỗi SQL: Thiếu cột BirthYear/Gender trong Database" });
         } else {
@@ -104,8 +94,8 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
-        let pool = await sql.connect(dbConfig);
-        const result = await pool.request()
+        await poolConnect;
+        const result = await appPool.request()
             .input('Username', sql.VarChar(50), username)
             .input('PasswordHash', sql.VarChar(255), password)
             .query("SELECT * FROM Users WHERE Username = @Username AND PasswordHash = @PasswordHash");
@@ -114,11 +104,7 @@ app.post('/api/login', async (req, res) => {
             const user = result.recordset[0];
             res.json({ 
                 success: true, 
-                user: { 
-                    id: user.UserID, 
-                    username: user.Username, 
-                    fullName: user.FullName 
-                } 
+                user: { id: user.UserID, username: user.Username, fullName: user.FullName } 
             });
         } else {
             res.status(401).json({ success: false, message: "Sai tài khoản hoặc mật khẩu" });
@@ -129,14 +115,12 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 3. API QUÊN MẬT KHẨU (Reset Password)
+// 3. API QUÊN MẬT KHẨU
 app.post('/api/forgot-password', async (req, res) => {
     const { username, email, newPassword } = req.body;
     try {
-        let pool = await sql.connect(dbConfig);
-
-        // Kiểm tra xem Username và Email có khớp trong CSDL không
-        const checkUser = await pool.request()
+        await poolConnect;
+        const checkUser = await appPool.request()
             .input('Username', sql.VarChar, username)
             .input('Email', sql.VarChar, email)
             .query("SELECT * FROM Users WHERE Username = @Username AND Email = @Email");
@@ -145,8 +129,7 @@ app.post('/api/forgot-password', async (req, res) => {
             return res.status(400).json({ success: false, message: "Tên đăng nhập hoặc Email không chính xác!" });
         }
 
-        // Nếu khớp, tiến hành cập nhật mật khẩu mới
-        await pool.request()
+        await appPool.request()
             .input('Username', sql.VarChar, username)
             .input('NewPassword', sql.VarChar, newPassword)
             .query("UPDATE Users SET PasswordHash = @NewPassword WHERE Username = @Username");
@@ -159,7 +142,7 @@ app.post('/api/forgot-password', async (req, res) => {
 });
 
 // ==========================================
-// CÁC API KHÁC (Search, Movies, Logs...)
+// CÁC API KHÁC (Search, Logs, Stats, History)
 // ==========================================
 
 app.get('/api/search', async (req, res) => {
@@ -167,46 +150,40 @@ app.get('/api/search', async (req, res) => {
         const keyword = req.query.q; 
         if (!keyword) return res.json({ movies: [], songs: [] });
 
-        let pool = await sql.connect(dbConfig);
-        const movieResult = await pool.request()
+        await poolConnect;
+        const movieResult = await appPool.request()
             .input('kw', sql.NVarChar, `%${keyword}%`)
             .query("SELECT * FROM Movies WHERE Title LIKE @kw OR Tags LIKE @kw");
 
-        const songResult = await pool.request()
+        const songResult = await appPool.request()
             .input('kw', sql.NVarChar, `%${keyword}%`)
             .query("SELECT * FROM Songs WHERE Title LIKE @kw OR Artist LIKE @kw OR Tags LIKE @kw");
 
-        res.json({
-            movies: movieResult.recordset,
-            songs: songResult.recordset
-        });
+        res.json({ movies: movieResult.recordset, songs: songResult.recordset });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 1. API Ghi log (Đã thêm cơ chế UPSERT: Chống spam Like và Rating)
+// API Ghi log 
 app.post('/api/log-interaction', async (req, res) => {
     try {
         const { userId, itemId, itemType, actionType } = req.body;
-        let pool = await sql.connect(dbConfig);
+        await poolConnect;
 
-        // NẾU LÀ LIKE / DISLIKE -> Xóa cảm xúc cũ đi trước khi thêm mới
         if (actionType === 'LIKE' || actionType === 'DISLIKE') {
-            await pool.request()
+            await appPool.request()
                 .input('UserID', sql.Int, userId).input('ItemID', sql.NVarChar, itemId).input('ItemType', sql.NVarChar, itemType)
                 .query(`DELETE FROM UserInteractions WHERE UserID=@UserID AND ItemID=@ItemID AND ItemType=@ItemType AND (ActionType='LIKE' OR ActionType='DISLIKE')`);
         }
         
-        // NẾU LÀ ĐÁNH GIÁ SAO -> Xóa số sao cũ đi trước khi thêm sao mới
         if (actionType.startsWith('RATE_')) {
-            await pool.request()
+            await appPool.request()
                 .input('UserID', sql.Int, userId).input('ItemID', sql.NVarChar, itemId).input('ItemType', sql.NVarChar, itemType)
                 .query(`DELETE FROM UserInteractions WHERE UserID=@UserID AND ItemID=@ItemID AND ItemType=@ItemType AND ActionType LIKE 'RATE_%'`);
         }
 
-        // Thêm hành động mới vào
-        await pool.request()
+        await appPool.request()
             .input('UserID', sql.Int, userId || null)
             .input('ItemID', sql.NVarChar, itemId)
             .input('ItemType', sql.NVarChar, itemType)
@@ -220,13 +197,13 @@ app.post('/api/log-interaction', async (req, res) => {
     }
 });
 
-// 2. TÍNH TOÁN THỐNG KÊ (Đã thêm COALESCE để luôn trả về số 0 thay vì NULL)
+// API THỐNG KÊ 
 app.get('/api/stats/:itemType/:itemId', async (req, res) => {
     try {
         const { itemType, itemId } = req.params;
-        let pool = await sql.connect(dbConfig);
+        await poolConnect;
         
-        const statsQuery = await pool.request()
+        const statsQuery = await appPool.request()
             .input('ItemID', sql.NVarChar, itemId)
             .input('ItemType', sql.NVarChar, itemType)
             .query(`
@@ -254,14 +231,13 @@ app.get('/api/stats/:itemType/:itemId', async (req, res) => {
     }
 });
 
-// API LẤY LỊCH SỬ XEM CỦA NGƯỜI DÙNG (HISTORY)
+// API LẤY LỊCH SỬ XEM
 app.get('/api/history/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        let pool = await sql.connect(dbConfig);
+        await poolConnect;
         
-        // Lấy tất cả các ItemID mà user đã 'VIEW', sắp xếp mới nhất lên đầu
-        const historyQuery = await pool.request()
+        const historyQuery = await appPool.request()
             .input('UserID', sql.Int, userId)
             .query(`
                 SELECT ItemID, ItemType, MAX(CreatedAt) as LastViewed
@@ -278,17 +254,13 @@ app.get('/api/history/:userId', async (req, res) => {
     }
 });
 
-// ==========================================
-// API XÓA LỊCH SỬ (HISTORY)
-// ==========================================
-
-// 1. Xóa 1 mục cụ thể
+// Xóa 1 mục cụ thể
 app.delete('/api/history/:userId/:itemType/:itemId', async (req, res) => {
     try {
         const { userId, itemType, itemId } = req.params;
-        let pool = await sql.connect(dbConfig);
+        await poolConnect;
         
-        await pool.request()
+        await appPool.request()
             .input('UserID', sql.Int, userId)
             .input('ItemType', sql.NVarChar, itemType)
             .input('ItemID', sql.NVarChar, itemId)
@@ -304,13 +276,13 @@ app.delete('/api/history/:userId/:itemType/:itemId', async (req, res) => {
     }
 });
 
-// 2. Xóa toàn bộ lịch sử (theo loại hoặc tất cả)
+// Xóa toàn bộ lịch sử
 app.delete('/api/history/:userId/:itemType/all', async (req, res) => {
     try {
         const { userId, itemType } = req.params;
-        let pool = await sql.connect(dbConfig);
+        await poolConnect;
         
-        await pool.request()
+        await appPool.request()
             .input('UserID', sql.Int, userId)
             .input('ItemType', sql.NVarChar, itemType)
             .query(`
@@ -326,8 +298,8 @@ app.delete('/api/history/:userId/:itemType/all', async (req, res) => {
 });
 
 // ==========================================
-// KHỞI CHẠY SERVER (LUÔN ĐỂ CUỐI CÙNG)
+// KHỞI CHẠY SERVER 
 // ==========================================
 app.listen(PORT, () => {
-    console.log(`Server đang chạy tại http://localhost:${PORT}`);
+    console.log(`🚀 Node Server đang chạy tại cổng: ${PORT}`);
 });
