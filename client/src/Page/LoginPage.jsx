@@ -32,7 +32,12 @@ const LoginPage = () => {
             if (data.success) {
                 if (isLogin) {
                     localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    if (data.user.role === 'admin') {
+                        alert('🎉 Chào mừng Admin! Bạn sẽ được chuyển đến trang quản trị.');
+                        window.location.href = '/admin';
+                    }else {
                     window.location.href = '/'; 
+                }
                 } else {
                     alert('🎉 Đăng ký thành công! Vui lòng đăng nhập để trải nghiệm.');
                     setIsLogin(true); // Chuyển về form đăng nhập

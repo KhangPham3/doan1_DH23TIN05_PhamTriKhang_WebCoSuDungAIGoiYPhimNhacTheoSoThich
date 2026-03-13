@@ -1,78 +1,63 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_KEY, BASE_URL, IMAGE_URL } from '../API/tmdbAPI';
-import Card from '../Components/UI/Card'; // Đảm bảo import đúng đường dẫn Card
+import Card from '../Components/UI/Card'; 
 
 function MovieDetail() {
-    const { id } = useParams(); // Lấy ID phim từ URL
+    const { id } = useParams(); 
     const [movie, setMovie] = useState(null);
-    const [trailerKey, setTrailerKey] = useState(null); // Lưu ID video Youtube
+    const [trailerKey, setTrailerKey] = useState(null); 
     const [similarMovies, setSimilarMovies] = useState([]);
-    
-    // Số lượng phim "Cùng thể loại" hiển thị ban đầu, và khi bấm xem thêm
     const [visibleSimilarCount, setVisibleSimilarCount] = useState(5); 
     
-    // State cho AI
     const [aiRecommendedMovies, setAiRecommendedMovies] = useState([]);
     const [loadingAI, setLoadingAI] = useState(false);
 
-    // Lấy thông tin user hiện tại
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+    // STATE LƯU TRỮ CẢM XÚC
+    const [likeStatus, setLikeStatus] = useState(null); 
+    const [userRating, setUserRating] = useState(0);    
+    const [hoverStar, setHoverStar] = useState(0);
+    const [stats, setStats] = useState({ views: 0, likes: 0, dislikes: 0, avgRating: 0, rateCount: 0 });
+
+    // 🟢 SỬA LỖI: RESET LẠI CẢM XÚC VÀ ĐÁNH GIÁ KHI ĐỔI PHIM MỚI
+    useEffect(() => {
+        setLikeStatus(null);
+        setUserRating(0);
+        setHoverStar(0);
+    }, [id]);
 
     useEffect(() => {
         const fetchDetail = async () => {
-            window.scrollTo({ top: 0, behavior: 'smooth' }); // Cuộn lên đầu khi đổi phim
+            window.scrollTo({ top: 0, behavior: 'smooth' }); 
             try {
-                // 1. GỌI API LẤY CHI TIẾT & PHIM LIÊN QUAN (Bằng Tiếng Việt)
-                const detailResponse = await fetch(
-                    `${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN&append_to_response=similar`
-                );
+                const detailResponse = await fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN&append_to_response=similar`);
                 const data = await detailResponse.json();
                 setMovie(data);
 
-                // 2. GỌI API LẤY VIDEO RIÊNG (Bằng Tiếng Anh / Mặc định để chắc chắn có video)
-                const videoResponse = await fetch(
-                    `${BASE_URL}/movie/${id}/videos?api_key=${API_KEY}` // KHÔNG dùng language=vi-VN ở đây
-                );
+                const videoResponse = await fetch(`${BASE_URL}/movie/${id}/videos?api_key=${API_KEY}`);
                 const videoData = await videoResponse.json();
 
-                // 3. LỌC LẤY VIDEO TRAILER
                 if (videoData.results && videoData.results.length > 0) {
-                    const trailer = videoData.results.find(
-                        vid => vid.site === 'YouTube' && (vid.type === 'Trailer' || vid.type === 'Teaser')
-                    );
+                    const trailer = videoData.results.find(vid => vid.site === 'YouTube' && (vid.type === 'Trailer' || vid.type === 'Teaser'));
                     setTrailerKey(trailer ? trailer.key : videoData.results[0].key);
                 } else {
                     setTrailerKey(null);
                 }
 
-                // 4. LƯU DANH SÁCH PHIM LIÊN QUAN
-                if (data.similar && data.similar.results) {
-                    setSimilarMovies(data.similar.results);
-                }
-                
+                if (data.similar && data.similar.results) setSimilarMovies(data.similar.results);
                 setVisibleSimilarCount(5);
 
-            } catch (error) {
-                console.error("Lỗi lấy chi tiết:", error);
-            }
+            } catch (error) { console.error("Lỗi lấy chi tiết:", error); }
             
-            // GHI NHẬN HÀNH ĐỘNG XEM
             if (id && currentUser && currentUser.id) {
                 try {
                     fetch('http://localhost:5000/api/log-interaction', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            userId: currentUser.id,
-                            itemId: id, 
-                            itemType: 'movie',
-                            actionType: 'VIEW'
-                        })
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: currentUser.id, itemId: id, itemType: 'movie', actionType: 'VIEW' })
                     });
-                } catch (error) {
-                    console.error("Lỗi ghi log:", error);
-                }
+                } catch (error) {}
             }
         };
 
@@ -80,26 +65,17 @@ function MovieDetail() {
             if (!currentUser || !currentUser.id) return;
             setLoadingAI(true);
             try {
-                // Gọi API AI
                 const res = await fetch(`http://localhost:8000/api/recommend/movies?userId=${currentUser.id}`);
                 const movieIds = await res.json();
-                
                 if (Array.isArray(movieIds) && movieIds.length > 0) {
-                    const filteredIds = movieIds.filter(mid => sidToString(mid) !== id).slice(0, 10);
-                    const promises = filteredIds.map(mid => 
-                        fetch(`${BASE_URL}/movie/${mid}?api_key=${API_KEY}&language=vi-VN`).then(r => r.json())
-                    );
+                    const filteredIds = movieIds.filter(mid => String(mid) !== id).slice(0, 10);
+                    const promises = filteredIds.map(mid => fetch(`${BASE_URL}/movie/${mid}?api_key=${API_KEY}&language=vi-VN`).then(r => r.json()));
                     const detailsRaw = await Promise.all(promises);
                     setAiRecommendedMovies(detailsRaw.filter(m => m && m.id));
                 }
-            } catch (err) {
-                console.error("Lỗi lấy AI:", err);
-            }
+            } catch (err) {}
             setLoadingAI(false);
         };
-
-       
-        const sidToString = (val) => val ? String(val) : '';
 
         if (id) {
             fetchDetail();
@@ -107,242 +83,221 @@ function MovieDetail() {
         }
     }, [id]); 
 
-    // Hàm xử lý "Xem thêm" phim liên quan
-    const handleLoadMoreSimilar = () => {
-        setVisibleSimilarCount(prevCount => prevCount + 5);
-    };
-
-   // STATE LƯU TRỮ
-    const [likeStatus, setLikeStatus] = useState(null); 
-    const [userRating, setUserRating] = useState(0);    
-    const [hoverStar, setHoverStar] = useState(0);
-    const [stats, setStats] = useState({ views: 0, likes: 0, dislikes: 0, avgRating: 0, rateCount: 0 });
-
-    // HÀM LẤY SỐ LIỆU TỪ DB
     const fetchStats = async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/stats/movie/${id}`); // Đối với SongDetail thì đổi 'movie' thành 'song'
+            const res = await fetch(`http://localhost:5000/api/stats/movie/${id}`); 
             const data = await res.json();
             setStats(data);
         } catch (err) { console.error(err); }
     };
 
-    // Vừa vào trang là lấy số liệu ngay
-    useEffect(() => {
-        if (id) fetchStats();
-    }, [id]);
+    useEffect(() => { if (id) fetchStats(); }, [id]);
 
-    // HÀM CLICK LIKE/DISLIKE
     const handleLikeStatus = async (status) => {
         if (!currentUser) { alert("Bạn cần đăng nhập để thả cảm xúc!"); return; }
-        setLikeStatus(status); // Cập nhật màu nút ngay lập tức cho mượt
+        setLikeStatus(status); 
         try {
             await fetch('http://localhost:5000/api/log-interaction', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: currentUser.id, itemId: String(id), itemType: 'movie', actionType: status })
             });
-            fetchStats(); // 👈 BÍ QUYẾT: GỌI LẠI HÀM NÀY ĐỂ SỐ LƯỢT LIKE NHẢY LÊN
-        } catch (err) { console.error("Lỗi:", err); }
+            fetchStats(); 
+        } catch (err) {}
     };
 
-    // HÀM CLICK ĐÁNH GIÁ SAO
     const handleRating = async (star) => {
         if (!currentUser) { alert("Bạn cần đăng nhập để đánh giá!"); return; }
-        setUserRating(star); // Lưu số sao user vừa chọn
+        setUserRating(star); 
         try {
             await fetch('http://localhost:5000/api/log-interaction', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: currentUser.id, itemId: String(id), itemType: 'movie', actionType: `RATE_${star}` })
             });
-            fetchStats(); // 👈 GỌI LẠI ĐỂ CẬP NHẬT ĐIỂM TRUNG BÌNH
-        } catch (err) { console.error("Lỗi:", err); }
+            fetchStats(); 
+        } catch (err) {}
     };
 
-    if (!movie) return <div style={{color:'white', textAlign:'center', marginTop: 100}}>⏳ Đang tải chi tiết phim...</div>;
+    if (!movie) return <div className="loading-screen"><div className="spinner"></div></div>;
 
     return (
-        <div style={{ color: 'white', paddingBottom: '100px' }}>
-            {/* --- KHU VỰC 1: BANNER VÀ THÔNG TIN PHIM --- */}
-            <div style={{
-                backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.8), #141414), url(${IMAGE_URL}${movie.backdrop_path})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                padding: '100px 5% 50px',
-                display: 'flex',
-                gap: '40px',
-                alignItems: 'flex-start',
-                flexWrap: 'wrap'
-            }}>
+        <div style={{ color: 'white', paddingBottom: '100px', background: '#0a0a0a', minHeight: '100vh' }}>
+            
+            {/* --- BANNER --- */}
+            <div className="hero-banner" style={{ backgroundImage: `url(${IMAGE_URL}${movie.backdrop_path})` }}>
+                <div className="hero-overlay"></div>
+                
                 <img 
                     src={movie.poster_path ? `${IMAGE_URL}${movie.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Poster'} 
-                    alt={movie.title}
-                    style={{ width: '300px', borderRadius: '10px', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}
+                    alt={movie.title} className="poster-img animate-fade-right"
                 />
 
-                <div style={{ flex: 1, minWidth: '300px' }}>
-                    <h1 style={{ fontSize: '3rem', margin: '0 0 10px 0' }}>{movie.title}</h1>
-                    <p style={{ fontStyle: 'italic', color: '#ccc', fontSize: '1.2rem' }}>{movie.tagline}</p>
+                <div className="hero-content animate-fade-up">
+                    <h1 className="movie-title">{movie.title}</h1>
+                    {movie.tagline && <p className="movie-tagline">"{movie.tagline}"</p>}
                     
-                    <div style={{ display: 'flex', gap: '15px', margin: '20px 0' }}>
-                        <span style={{ background: '#e50914', padding: '5px 10px', borderRadius: '4px', fontWeight: 'bold' }}>
-                            {movie.vote_average?.toFixed(1)} ⭐
-                        </span>
-                        <span style={{ border: '1px solid white', padding: '5px 10px', borderRadius: '4px' }}>
-                            {movie.release_date?.split('-')[0] || 'N/A'}
-                        </span>
-                        <span style={{ border: '1px solid white', padding: '5px 10px', borderRadius: '4px' }}>
-                            {movie.runtime} phút
-                        </span>
+                    <div className="movie-meta">
+                        <span className="meta-badge rating-badge">⭐ {movie.vote_average?.toFixed(1)}</span>
+                        <span className="meta-badge">{movie.release_date?.split('-')[0] || 'N/A'}</span>
+                        <span className="meta-badge">{movie.runtime} phút</span>
                     </div>
 
-                    <h3 style={{ borderBottom: '2px solid #e50914', display: 'inline-block', marginBottom: '10px' }}>Nội dung</h3>
-                    <p style={{ lineHeight: '1.6', fontSize: '1.1rem', color: '#ddd', maxWidth: '800px' }}>
-                        {movie.overview || "Chưa có mô tả tiếng Việt cho phim này."}
-                    </p>
+                    <h3 className="section-heading">Nội dung chính</h3>
+                    <p className="movie-overview">{movie.overview || "Chưa có mô tả tiếng Việt cho phim này."}</p>
                     
-                    <div style={{ marginTop: '20px' }}>
-                        {movie.genres?.map(g => (
-                            <span key={g.id} style={{ marginRight: '10px', color: '#999', background: '#222', padding: '5px 10px', borderRadius: '20px', fontSize: '0.9rem' }}>
-                                {g.name}
-                            </span>
-                        ))}
+                    <div className="genres-container">
+                        {movie.genres?.map(g => ( <span key={g.id} className="genre-tag">{g.name}</span> ))}
                     </div>
                 </div>
             </div>
 
-            {/* --- KHU VỰC 2: VIDEO TRAILER PHIM --- */}
-            {trailerKey && (
-                <div style={{ padding: '0 5%', marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <h2 style={{ color: 'white', marginBottom: '20px', alignSelf: 'flex-start' }}>🎬 Trailer Chính Thức</h2>
-                    <div style={{ maxWidth: '1000px', width: '100%', position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: '10px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-                        <iframe 
-                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-                            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=0`} 
-                            title="Movie Trailer"
-                            frameBorder="0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowFullScreen
-                        ></iframe>
-                    </div>
-                </div>
-            )}
-
-            {/* --- KHU VỰC THỐNG KÊ VÀ TƯƠNG TÁC (MODERN UI) --- */}
-                    <div style={{ background: 'linear-gradient(145deg, #1a1a1a, #121212)', padding: '20px 30px', borderRadius: '15px', marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid #333', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-                        
-                        {/* Dòng 1: Thống kê tổng quan */}
-                        <div style={{ display: 'flex', gap: '30px', color: '#aaa', fontSize: '0.95rem', borderBottom: '1px solid #333', paddingBottom: '15px', flexWrap: 'wrap' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>👁️ <strong style={{color: 'white', fontSize: '1.1rem'}}>{stats.views}</strong> lượt xem</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>❤️ <strong style={{color: '#1db954', fontSize: '1.1rem'}}>{stats.likes}</strong> người thích</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>⭐ <strong style={{color: '#ffc107', fontSize: '1.1rem'}}>{stats.avgRating}</strong>/5 ({stats.rateCount} đánh giá)</span>
-                        </div>
-
-                        {/* Dòng 2: Bảng Điều Khiển Tương Tác */}
-                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                            
-                            <div style={{ display: 'flex', gap: '15px' }}>
-                                <button 
-                                    onClick={() => handleLikeStatus('LIKE')} 
-                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 25px', borderRadius: '30px', border: likeStatus === 'LIKE' ? 'none' : '1px solid #444', background: likeStatus === 'LIKE' ? 'linear-gradient(45deg, #1db954, #128c3c)' : 'transparent', color: likeStatus === 'LIKE' ? 'white' : '#ccc', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s', boxShadow: likeStatus === 'LIKE' ? '0 5px 15px rgba(29, 185, 84, 0.4)' : 'none' }}
-                                >
-                                    👍 Thích
-                                </button>
-                                <button 
-                                    onClick={() => handleLikeStatus('DISLIKE')} 
-                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 25px', borderRadius: '30px', border: likeStatus === 'DISLIKE' ? 'none' : '1px solid #444', background: likeStatus === 'DISLIKE' ? 'linear-gradient(45deg, #e50914, #b20710)' : 'transparent', color: likeStatus === 'DISLIKE' ? 'white' : '#ccc', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s', boxShadow: likeStatus === 'DISLIKE' ? '0 5px 15px rgba(229, 9, 20, 0.4)' : 'none' }}
-                                >
-                                    👎 Không
-                                </button>
-                            </div>
-                            
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(0,0,0,0.3)', padding: '10px 20px', borderRadius: '30px' }}>
-                                <span style={{ color: '#ccc', fontWeight: 'bold', fontSize: '0.9rem' }}>Đánh giá của bạn: </span>
-                                <div style={{ display: 'flex', gap: '5px' }}>
-                                    {[1, 2, 3, 4, 5].map(star => (
-                                        <span 
-                                            key={star} onClick={() => handleRating(star)}
-                                            onMouseEnter={() => setHoverStar(star)} onMouseLeave={() => setHoverStar(0)}
-                                            style={{ 
-                                                color: (hoverStar || userRating) >= star ? '#ffc107' : '#444', 
-                                                cursor: 'pointer', fontSize: '1.8rem', transition: 'all 0.2s', 
-                                                textShadow: (hoverStar || userRating) >= star ? '0 0 15px rgba(255, 193, 7, 0.8)' : 'none', 
-                                                transform: hoverStar === star ? 'scale(1.2)' : 'scale(1)' 
-                                            }}
-                                        >★</span>
-                                    ))}
-                                </div>
-                            </div>
+            {/* --- CONTAINER CHÍNH --- */}
+            <div className="content-container">
+                {/* TRAILER */}
+                {trailerKey && (
+                    <div className="trailer-section animate-fade-up" style={{ animationDelay: '0.3s' }}>
+                        <h2 className="gradient-text-red">🎬 Trailer Chính Thức</h2>
+                        <div className="video-wrapper">
+                            <iframe src={`https://www.youtube.com/embed/${trailerKey}?autoplay=0`} title="Movie Trailer" frameBorder="0" allowFullScreen></iframe>
                         </div>
                     </div>
-
-            {/* --- KHU VỰC 3: PHIM CÙNG THỂ LOẠI (VỚI NÚT XEM THÊM) --- */}
-            {similarMovies.length > 0 && (
-                <div style={{ padding: '0 5%', marginTop: '60px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h2 style={{ color: '#e50914', borderLeft: '5px solid #e50914', paddingLeft: '15px' }}>
-                            🍿 Phim Tương Tự
-                        </h2>
-                    </div>
-                    
-                    <div className="media-grid">
-                        {/* Chỉ map ra đúng số lượng visibleSimilarCount */}
-                        {similarMovies.slice(0, visibleSimilarCount).map(m => (
-                            <Card 
-                                key={m.id} id={m.id} type="movie" title={m.title}
-                                image={m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Image'}
-                                subtitle={`⭐ ${m.vote_average?.toFixed(1)}`}
-                            />
-                        ))}
+                )}
+                
+                {/* BẢNG ĐIỀU KHIỂN TƯƠNG TÁC */}
+                <div className="action-panel animate-fade-up" style={{ animationDelay: '0.2s' }}>
+                    <div className="stats-row">
+                        <span><i className="icon">👁️</i> <strong className="stat-num">{stats.views}</strong> lượt xem</span>
+                        <span><i className="icon">❤️</i> <strong className="stat-num highlight-green">{stats.likes}</strong> người thích</span>
+                        <span><i className="icon">⭐</i> <strong className="stat-num highlight-yellow">{stats.avgRating}</strong>/5 ({stats.rateCount} đánh giá)</span>
                     </div>
 
-                    {/* Nút Xem thêm: Nếu số phim đang hiện nhỏ hơn tổng số phim tương tự thì hiện nút */}
-                    {visibleSimilarCount < similarMovies.length && (
-                        <div style={{ textAlign: 'center', marginTop: '30px' }}>
-                            <button 
-                                onClick={handleLoadMoreSimilar}
-                                style={{
-                                    padding: '10px 30px', background: 'transparent', color: 'white',
-                                    border: '1px solid #e50914', borderRadius: '30px', cursor: 'pointer',
-                                    fontSize: '1rem', transition: 'all 0.3s'
-                                }}
-                                onMouseEnter={(e) => { e.target.style.background = '#e50914'; }}
-                                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
-                            >
-                                Hiển thị thêm phim 👇
+                    <div className="actions-row">
+                        <div className="btn-group">
+                            <button className={`action-btn ${likeStatus === 'LIKE' ? 'active-like' : ''}`} onClick={() => handleLikeStatus('LIKE')}>
+                                👍 Thích
+                            </button>
+                            <button className={`action-btn ${likeStatus === 'DISLIKE' ? 'active-dislike' : ''}`} onClick={() => handleLikeStatus('DISLIKE')}>
+                                👎 Không
                             </button>
                         </div>
-                    )}
+                        
+                        <div className="rating-box">
+                            <span className="rating-text">Đánh giá của bạn: </span>
+                            <div className="stars-container">
+                                {[1, 2, 3, 4, 5].map(star => (
+                                    <span 
+                                        key={star} onClick={() => handleRating(star)}
+                                        onMouseEnter={() => setHoverStar(star)} onMouseLeave={() => setHoverStar(0)}
+                                        className={`star ${ (hoverStar || userRating) >= star ? 'star-active' : '' }`}
+                                    >★</span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            )}
 
-            {/* --- KHU VỰC 4: AI TỰ ĐỘNG GỢI Ý --- */}
-            {currentUser && (
-                <div style={{ padding: '0 5%', marginTop: '60px' }}>
-                    <h2 style={{ color: '#00bcd4', borderLeft: '5px solid #00bcd4', paddingLeft: '15px', marginBottom: '20px' }}>
-                        ✨ Các phim được dành riêng cho bạn
-                    </h2>
-                    
-                    {loadingAI ? (
-                        <div style={{ textAlign: 'center', color: '#888' }}>⏳ AI đang phân tích dữ liệu...</div>
-                    ) : aiRecommendedMovies.length > 0 ? (
+                
+
+                {/* PHIM TƯƠNG TỰ */}
+                {similarMovies.length > 0 && (
+                    <div className="section-margin animate-fade-up" style={{ animationDelay: '0.4s' }}>
+                        <h2 className="gradient-text-red border-left-red">🍿 Phim Tương Tự</h2>
                         <div className="media-grid">
-                            {aiRecommendedMovies.map(m => (
-                                <Card 
-                                    key={m.id} id={m.id} type="movie" title={m.title}
-                                    image={m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Image'}
-                                    subtitle={`⭐ ${m.vote_average?.toFixed(1)}`}
-                                />
+                            {similarMovies.slice(0, visibleSimilarCount).map(m => (
+                                <Card key={m.id} id={m.id} type="movie" title={m.title} image={m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450'} subtitle={`⭐ ${m.vote_average?.toFixed(1)}`} />
                             ))}
                         </div>
-                    ) : (
-                        <div style={{ padding: '20px', background: '#222', borderRadius: '10px', color: '#aaa', textAlign: 'center' }}>
-                            🤖 <strong>Hệ thống chưa đủ dữ liệu!</strong><br/>
-                            Hãy xem và tương tác thêm với các phim khác để chúng tôi hiểu rõ sở thích của bạn hơn.
-                        </div>
-                    )}
-                </div>
-            )}
+                        {visibleSimilarCount < similarMovies.length && (
+                            <div className="load-more-container">
+                                <button className="load-more-btn" onClick={() => setVisibleSimilarCount(p => p + 5)}>Hiển thị thêm 👇</button>
+                            </div>
+                        )}
+                    </div>
+                )}
 
+                {/* GỢI Ý AI */}
+                {currentUser && (
+                    <div className="section-margin animate-fade-up" style={{ animationDelay: '0.5s' }}>
+                        <h2 className="gradient-text-blue border-left-blue">✨ Dành riêng cho bạn (AI)</h2>
+                        {loadingAI ? (
+                            <div style={{ textAlign: 'center', color: '#00bcd4' }}>🤖 AI đang phân tích dữ liệu...</div>
+                        ) : aiRecommendedMovies.length > 0 ? (
+                            <div className="media-grid">
+                                {aiRecommendedMovies.map(m => (
+                                    <Card key={m.id} id={m.id} type="movie" title={m.title} image={m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450'} subtitle={`⭐ ${m.vote_average?.toFixed(1)}`} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="empty-ai-box">🤖 <strong>Hệ thống chưa đủ dữ liệu!</strong><br/>Hãy tương tác thêm để chúng tôi hiểu bạn hơn.</div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* --- CSS TÍCH HỢP --- */}
+            <style dangerouslySetInnerHTML={{__html: `
+                .loading-screen { height: 100vh; display: flex; align-items: center; justify-content: center; background: #0a0a0a; }
+                .spinner { width: 50px; height: 50px; border-radius: 50%; border: 3px solid #e50914; border-top-color: transparent; animation: spin 1s linear infinite; }
+                
+                .hero-banner { position: relative; padding: 120px 5% 60px; display: flex; gap: 50px; align-items: center; flex-wrap: wrap; background-size: cover; background-position: top center; background-attachment: fixed; }
+                .hero-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to bottom, rgba(10,10,10,0.2) 0%, rgba(10,10,10,1) 100%), linear-gradient(to right, rgba(10,10,10,0.9) 0%, rgba(10,10,10,0.5) 50%, rgba(10,10,10,0.8) 100%); z-index: 1; }
+                .poster-img { width: 320px; border-radius: 15px; box-shadow: 0 15px 40px rgba(0,0,0,0.8); z-index: 2; border: 1px solid rgba(255,255,255,0.1); }
+                .hero-content { position: relative; z-index: 2; flex: 1; min-width: 300px; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+                
+                .movie-title { font-size: 3.5rem; margin: 0 0 5px; font-weight: 900; background: linear-gradient(to right, #fff, #ccc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+                .movie-tagline { font-style: italic; color: #aaa; font-size: 1.3rem; margin-bottom: 25px; }
+                .movie-meta { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
+                .meta-badge { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 6px 15px; border-radius: 8px; font-weight: bold; backdrop-filter: blur(5px); }
+                .rating-badge { background: rgba(229, 9, 20, 0.2); border-color: #e50914; color: #ffc107; }
+                .section-heading { border-bottom: 2px solid #e50914; display: inline-block; margin-bottom: 15px; padding-bottom: 5px; font-size: 1.2rem; }
+                .movie-overview { line-height: 1.8; font-size: 1.1rem; color: #ddd; max-width: 900px; margin-bottom: 25px; }
+                .genres-container { display: flex; gap: 10px; flex-wrap: wrap; }
+                .genre-tag { color: #fff; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 18px; border-radius: 30px; font-size: 0.9rem; transition: all 0.3s; cursor: default; }
+                .genre-tag:hover { background: #e50914; border-color: #e50914; }
+
+                .content-container { padding: 0 5%; position: relative; z-index: 5; margin-top: -30px; }
+                
+                /* Action Panel Glassmorphism */
+                .action-panel { background: rgba(20,20,20,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 25px 35px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 20px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 20px; }
+                .stats-row { display: flex; gap: 40px; color: #aaa; font-size: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; flex-wrap: wrap; }
+                .stat-num { color: white; font-size: 1.3rem; margin-left: 5px; }
+                .highlight-green { color: #1db954; } .highlight-yellow { color: #ffc107; }
+                .actions-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+                
+                .btn-group { display: flex; gap: 15px; }
+                .action-btn { display: flex; align-items: center; gap: 8px; padding: 12px 30px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #ccc; cursor: pointer; font-weight: bold; font-size: 1rem; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+                .action-btn:hover { background: rgba(255,255,255,0.1); color: white; transform: translateY(-2px); }
+                .action-btn:active { transform: scale(0.95); }
+                .active-like { background: linear-gradient(45deg, #1db954, #128c3c); border-color: transparent; color: white; box-shadow: 0 10px 20px rgba(29, 185, 84, 0.4); }
+                .active-dislike { background: linear-gradient(45deg, #e50914, #b20710); border-color: transparent; color: white; box-shadow: 0 10px 20px rgba(229, 9, 20, 0.4); }
+
+                .rating-box { display: flex; align-items: center; gap: 15px; background: rgba(0,0,0,0.4); padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.05); }
+                .rating-text { color: #ccc; font-weight: bold; font-size: 0.95rem; }
+                .stars-container { display: flex; gap: 5px; }
+                .star { color: #444; cursor: pointer; font-size: 2rem; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); line-height: 1; }
+                .star-active { color: #ffc107; text-shadow: 0 0 15px rgba(255, 193, 7, 0.8); transform: scale(1.1); }
+                
+                .trailer-section { margin-top: 50px; }
+                .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 15px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); background: #000; }
+                .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+                
+                .section-margin { margin-top: 60px; }
+                .gradient-text-red { font-size: 1.8rem; margin-bottom: 25px; color: #fff; display: flex; align-items: center; }
+                .border-left-red { border-left: 5px solid #e50914; padding-left: 15px; }
+                .gradient-text-blue { font-size: 1.8rem; margin-bottom: 25px; color: #fff; display: flex; align-items: center; }
+                .border-left-blue { border-left: 5px solid #00bcd4; padding-left: 15px; }
+                
+                .load-more-container { text-align: center; margin-top: 40px; }
+                .load-more-btn { padding: 12px 40px; background: transparent; color: white; border: 2px solid #e50914; border-radius: 30px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: all 0.3s; }
+                .load-more-btn:hover { background: #e50914; box-shadow: 0 10px 20px rgba(229,9,20,0.3); transform: translateY(-3px); }
+                
+                .empty-ai-box { padding: 30px; background: rgba(0,188,212,0.05); border: 1px dashed rgba(0,188,212,0.3); border-radius: 15px; color: #aaa; text-align: center; font-size: 1.1rem; line-height: 1.6; }
+
+                @keyframes fadeUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
+                @keyframes fadeRight { 0% { opacity: 0; transform: translateX(-30px); } 100% { opacity: 1; transform: translateX(0); } }
+                @keyframes spin { 100% { transform: rotate(360deg); } }
+                .animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+                .animate-fade-right { animation: fadeRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+            `}} />
         </div>
     );
 }

@@ -104,7 +104,7 @@ app.post('/api/login', async (req, res) => {
             const user = result.recordset[0];
             res.json({ 
                 success: true, 
-                user: { id: user.UserID, username: user.Username, fullName: user.FullName } 
+                user: { id: user.UserID, username: user.Username, fullName: user.FullName, role: user.Role} 
             });
         } else {
             res.status(401).json({ success: false, message: "Sai tài khoản hoặc mật khẩu" });
@@ -294,6 +294,101 @@ app.delete('/api/history/:userId/:itemType/all', async (req, res) => {
     } catch (err) {
         console.error("Lỗi xóa toàn bộ lịch sử:", err);
         res.status(500).json({ success: false, message: "Lỗi Server" });
+    }
+});
+
+// ==========================================
+// CÁC API DÀNH RIÊNG CHO ADMIN
+// ==========================================
+
+// 1. Lấy thống kê tổng quan
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        await poolConnect;
+        
+        // Đếm tổng số người dùng
+        const usersCount = await appPool.request().query("SELECT COUNT(*) as total FROM Users");
+        
+        // Đếm tổng số lượt tương tác (View, Like...)
+        const interactionsCount = await appPool.request().query("SELECT COUNT(*) as total FROM UserInteractions");
+
+        res.json({
+            totalUsers: usersCount.recordset[0].total,
+            totalInteractions: interactionsCount.recordset[0].total
+        });
+    } catch (err) {
+        console.error("Lỗi lấy Admin Stats:", err);
+        res.status(500).json({ error: 'Lỗi Server' });
+    }
+});
+
+// 2. Lấy danh sách người dùng
+app.get('/api/admin/users', async (req, res) => {
+    try {
+        await poolConnect;
+        // Lấy danh sách user, sắp xếp mới nhất lên đầu
+        const users = await appPool.request().query("SELECT UserID, Username, FullName, Email, BirthYear, Gender, Role, Status FROM Users ORDER BY UserID DESC");
+        res.json(users.recordset);
+    } catch (err) {
+        console.error("Lỗi lấy danh sách User:", err);
+        res.status(500).json({ error: 'Lỗi Server' });
+    }
+});
+
+// --- THÊM MỚI: API thay đổi trạng thái User (Khóa / Mở khóa) ---
+app.put('/api/admin/users/:userId/status', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { status } = req.body; // 'active' hoặc 'banned'
+        await poolConnect;
+        
+        await appPool.request()
+            .input('UserID', sql.Int, userId)
+            .input('Status', sql.VarChar(20), status)
+            .query("UPDATE Users SET Status = @Status WHERE UserID = @UserID AND Role != 'admin'"); // Không cho phép khóa admin khác
+            
+        res.json({ success: true, message: "Cập nhật trạng thái thành công!" });
+    } catch (err) {
+        console.error("Lỗi cập nhật trạng thái User:", err);
+        res.status(500).json({ error: 'Lỗi Server' });
+    }
+});
+
+
+// 3. API lấy dữ liệu biểu đồ (Thống kê tương tác 7 ngày qua)
+app.get('/api/admin/chart-data', async (req, res) => {
+    try {
+        await poolConnect;
+        
+        // Truy vấn gộp nhóm số lượng tương tác theo từng ngày (7 ngày gần nhất)
+        const chartQuery = await appPool.request().query(`
+            SELECT 
+                CAST(CreatedAt AS DATE) as date,
+                ItemType,
+                COUNT(*) as count
+            FROM UserInteractions
+            WHERE CreatedAt >= DATEADD(day, -7, GETDATE())
+            GROUP BY CAST(CreatedAt AS DATE), ItemType
+            ORDER BY date ASC
+        `);
+
+        // Xử lý dữ liệu trả về cho Frontend dễ vẽ biểu đồ
+        const rawData = chartQuery.recordset;
+        let formattedData = {};
+        
+        // Gom nhóm theo ngày
+        rawData.forEach(row => {
+            const dateStr = row.date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+            if(!formattedData[dateStr]) formattedData[dateStr] = { date: dateStr, movie: 0, song: 0 };
+            
+            if(row.ItemType === 'movie') formattedData[dateStr].movie = row.count;
+            if(row.ItemType === 'song') formattedData[dateStr].song = row.count;
+        });
+
+        res.json(Object.values(formattedData));
+    } catch (err) {
+        console.error("Lỗi lấy dữ liệu biểu đồ:", err);
+        res.status(500).json({ error: 'Lỗi Server' });
     }
 });
 
