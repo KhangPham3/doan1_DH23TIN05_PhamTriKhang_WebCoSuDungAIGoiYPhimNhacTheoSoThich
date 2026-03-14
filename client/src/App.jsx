@@ -1,10 +1,12 @@
 import React from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom'; // 🟢 Thêm Navigate
-
+import Onboarding from './Page/Onboarding';
 import Navigation from './Components/Navigation';
 import Footer from './Footer';
+import WatchlistPage from './Page/WatchlistPage';
 import HomePage from './Page/HomePage';
 import LoginPage from './Page/LoginPage';
+import ProfilePage from './Page/ProfilePage';
 import AdminDashboard from './Page/AdminDashboard';
 import MoviePage from './Page/MoviePage'; 
 import SongPage from './Page/SongPage'; 
@@ -55,8 +57,11 @@ function AppContent() {
         {/* 🟢 TẤT CẢ ROUTE THƯỜNG ĐƯỢC BỌC TRONG <UserRoute> */}
         <Route path="/" element={<UserRoute><HomePage /></UserRoute>} />
         <Route path="/login" element={<UserRoute><LoginPage /></UserRoute>} />
+        <Route path="/onboarding" element={<UserRoute><Onboarding /></UserRoute>} />
         <Route path="/forgot-password" element={<UserRoute><ForgotPasswordPage /></UserRoute>} />
         <Route path="/search" element={<UserRoute><Searchpage /></UserRoute>} />
+        <Route path="/watchlist" element={<UserRoute><WatchlistPage /></UserRoute>} />
+        <Route path="/profile" element={<UserRoute><ProfilePage /></UserRoute>} />
         <Route path="/movies" element={<UserRoute><MoviePage /></UserRoute>} />
         <Route path="/history" element={<UserRoute><HistoryPage /></UserRoute>} />
         <Route path="/songs" element={<UserRoute><SongPage /></UserRoute>} />

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-// 👇 Đã import thêm discoverMovies
 import { searchMovies, discoverMovies, IMAGE_URL } from '../API/tmdbAPI';
 import { searchMusic } from '../API/MusicAPI'; 
 
@@ -17,12 +16,6 @@ function Navigation() {
     const [showSearchDropdown, setShowSearchDropdown] = useState(false); 
     const [showGenreMenu, setShowGenreMenu] = useState(false);
 
-    const handleLogout = () => {
-        localStorage.removeItem('currentUser');
-        navigate('/login');
-        window.location.reload();
-    };
-
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
         window.addEventListener('scroll', handleScroll);
@@ -36,37 +29,28 @@ function Navigation() {
             
             if (kw.length > 1) {
                 try {
-                    // TỪ ĐIỂN MAP THỂ LOẠI (Hỗ trợ gợi ý thông minh)
                     const genreMap = {
-                        "hành động": 28,
-                        "tình cảm": 10749,
-                        "hài": 35,
-                        "kinh dị": 27,
-                        "viễn tưởng": 878,
-                        "hoạt hình": 16
+                        "hành động": 28, "tình cảm": 10749, "hài": 35,
+                        "kinh dị": 27, "viễn tưởng": 878, "hoạt hình": 16
                     };
                     
-                    // Chuyển từ khóa về chữ thường để so sánh
                     const genreId = genreMap[kw.toLowerCase()];
 
                     let mRes = [];
                     let sRes = [];
 
-                    // NẾU TỪ KHÓA LÀ THỂ LOẠI -> GỌI API LỌC PHIM THEO TAG
                     if (genreId) {
                         [mRes, sRes] = await Promise.all([
                             discoverMovies({ withGenres: genreId }),
-                            searchMusic(kw) // YouTube tự động search thông minh
+                            searchMusic(kw) 
                         ]);
                     } else {
-                        // NẾU LÀ TỪ KHÓA BÌNH THƯỜNG -> TÌM THEO TÊN PHIM
                         [mRes, sRes] = await Promise.all([
                             searchMovies(kw),
                             searchMusic(kw)
                         ]);
                     }
 
-                    // Chuẩn hóa kết quả Phim
                     const mappedMovies = (mRes || []).slice(0, 3).map(item => ({
                         id: item.id,
                         name: item.title,
@@ -75,7 +59,6 @@ function Navigation() {
                         image: item.poster_path ? `${IMAGE_URL}${item.poster_path}` : 'https://via.placeholder.com/50'
                     }));
 
-                    // Chuẩn hóa kết quả Nhạc
                     const mappedSongs = (Array.isArray(sRes) ? sRes : [])
                         .filter(s => s.videoId)
                         .slice(0, 3)
@@ -97,7 +80,7 @@ function Navigation() {
                 setSuggestions([]);
                 setShowSearchDropdown(false);
             }
-        }, 400); // Giảm thời gian chờ xuống 400ms để gợi ý xuất hiện nhanh hơn
+        }, 400); 
 
         return () => clearTimeout(timer);
     }, [keyword]);
@@ -153,157 +136,211 @@ function Navigation() {
     };
 
     return (
-        <nav style={{ 
-            position: 'fixed', top: 0, width: '100%', zIndex: 9999,
-            padding: '10px 40px', height: '70px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            transition: 'all 0.3s ease',
-            background: scrolled ? '#0f0f0f' : 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, transparent 100%)',
-            backdropFilter: scrolled ? 'blur(10px)' : 'none',
-            boxSizing: 'border-box' 
-        }}>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '30px', flexShrink: 0 }}>
-                <Link to="/" style={{ color: '#e50914', textDecoration: 'none', fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px' }}>
-                    F&S
-                </Link>
+        <>
+            <nav style={{ 
+                position: 'fixed', top: 0, width: '100%', zIndex: 9999,
+                padding: '10px 40px', height: '70px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                transition: 'all 0.3s ease',
+                background: scrolled ? '#0f0f0f' : 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, transparent 100%)',
+                backdropFilter: scrolled ? 'blur(10px)' : 'none',
+                boxSizing: 'border-box' 
+            }}>
                 
-                <div style={{ display: 'flex', gap: '25px', alignItems: 'center' }}>
-                    <Link to="/movies" className="nav-link">Phim</Link>
-                    <Link to="/songs" className="nav-link">Nhạc</Link>
-                    <Link to="/history" className="nav-link">Lịch sử</Link>
-
+                <div style={{ display: 'flex', alignItems: 'center', gap: '30px', flexShrink: 0 }}>
+                    <Link to="/" style={{ color: '#e50914', textDecoration: 'none', fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px' }}>
+                        F&S
+                    </Link>
                     
-                    <div 
-                        style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center' }}
-                        onMouseEnter={handleGenreMouseEnter}
-                        onMouseLeave={handleGenreMouseLeave}
-                    >
-                        <span className="nav-link" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            Thể loại <small style={{fontSize: '0.6rem'}}>▼</small>
-                        </span>
-                    
-                        {showGenreMenu && (
-                            <div style={{
-                                    position: 'absolute', top: '40px', left: '-50px',
-                                    width: '350px', background: 'rgba(20, 20, 20, 0.95)',
-                                    backdropFilter: 'blur(15px)', borderRadius: '8px',
-                                    border: '1px solid rgba(255,255,255,0.1)', padding: '20px',
-                                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px',
-                                    boxShadow: '0 10px 30px rgba(0,0,0,0.8)', zIndex: 10000, marginTop: '10px' 
-                                }}
-                                onMouseEnter={handleGenreMouseEnter}
-                                onMouseLeave={handleGenreMouseLeave}
-                            >
-                                <div style={{ position: 'absolute', top: '-20px', left: 0, width: '100%', height: '20px', background: 'transparent' }}></div>
-
-                                <div>
-                                    <h4 style={{ color: '#e50914', margin: '0 0 10px 0', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🎬 PHIM</h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {staticGenres.movieGenres.map((g, idx) => (
-                                            <div key={idx} onClick={() => handleGenreClick(g, 'movie')} className="genre-item">
-                                                {g}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h4 style={{ color: '#1db954', margin: '0 0 10px 0', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🎵 NHẠC</h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {staticGenres.songGenres.map((g, idx) => (
-                                            <div key={idx} onClick={() => handleGenreClick(g, 'song')} className="genre-item">
-                                                {g}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <Link to="/recommend" className="nav-link" style={{ 
-                                display: 'flex', alignItems: 'center', gap: '8px', 
-                                background: 'linear-gradient(45deg, #00bcd4, #2196f3)', 
-                                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', 
-                                fontWeight: '900', letterSpacing: '1px',
-                                textShadow: '0 0 20px rgba(0, 188, 212, 0.4)',
-                                textAlign: 'center', justifyContent: 'center'
-                                }}>
-                                <span style={{ textShadow: 'none', color: '#00bcd4'}}>✨</span> GỢI Ý VỚI AI
-                                </Link>
-                            </div>
-                            
-                        )}
+                    <div style={{ display: 'flex', gap: '25px', alignItems: 'center' }}>
+                        <Link to="/movies" className="nav-link">Phim</Link>
+                        <Link to="/songs" className="nav-link">Nhạc</Link>
                         
+                        
+                        <div 
+                            style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center' }}
+                            onMouseEnter={handleGenreMouseEnter}
+                            onMouseLeave={handleGenreMouseLeave}
+                        >
+                            <span className="nav-link" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                Thể loại <small style={{fontSize: '0.6rem'}}>▼</small>
+                            </span>
+                        
+                            {showGenreMenu && (
+                                <div style={{
+                                        position: 'absolute', top: '40px', left: '-50px',
+                                        width: '350px', background: 'rgba(20, 20, 20, 0.95)',
+                                        backdropFilter: 'blur(15px)', borderRadius: '8px',
+                                        border: '1px solid rgba(255,255,255,0.1)', padding: '20px',
+                                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px',
+                                        boxShadow: '0 10px 30px rgba(0,0,0,0.8)', zIndex: 10000, marginTop: '10px' 
+                                    }}
+                                    onMouseEnter={handleGenreMouseEnter}
+                                    onMouseLeave={handleGenreMouseLeave}
+                                >
+                                    <div style={{ position: 'absolute', top: '-20px', left: 0, width: '100%', height: '20px', background: 'transparent' }}></div>
+
+                                    <div>
+                                        <h4 style={{ color: '#e50914', margin: '0 0 10px 0', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🎬 PHIM</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {staticGenres.movieGenres.map((g, idx) => (
+                                                <div key={idx} onClick={() => handleGenreClick(g, 'movie')} className="genre-item">
+                                                    {g}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 style={{ color: '#1db954', margin: '0 0 10px 0', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🎵 NHẠC</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {staticGenres.songGenres.map((g, idx) => (
+                                                <div key={idx} onClick={() => handleGenreClick(g, 'song')} className="genre-item">
+                                                    {g}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <Link to="/recommend" className="nav-link" style={{ 
+                                    display: 'flex', alignItems: 'center', gap: '8px', 
+                                    background: 'linear-gradient(45deg, #00bcd4, #2196f3)', 
+                                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', 
+                                    fontWeight: '900', letterSpacing: '1px',
+                                    textShadow: '0 0 20px rgba(0, 188, 212, 0.4)',
+                                    textAlign: 'center', justifyContent: 'center'
+                                    }}>
+                                    <span style={{ textShadow: 'none', color: '#00bcd4'}}>✨</span> GỢI Ý VỚI AI
+                                    </Link>
+                                </div>
+                            )}
+                        </div>
                     </div>
-
                 </div>
-            </div>
 
-            <div ref={searchRef} style={{ flex: 1, maxWidth: '600px', position: 'relative', margin: '0 30px' }}>
-                <form onSubmit={handleSearchSubmit} style={{ width: '100%' }}>
-                    <input 
-                        type="text" 
-                        placeholder="Tìm phim hoặc bài hát..." 
-                        value={keyword}
-                        onChange={handleInputChange} 
-                        onFocus={() => keyword && suggestions.length > 0 && setShowSearchDropdown(true)}
-                        style={{ 
-                            width: '100%', 
-                            padding: '0 20px',
-                            height: '40px',
-                            background: '#222', 
-                            border: '1px solid #333', 
-                            color: 'white', 
-                            borderRadius: '20px',
-                            outline: 'none', 
-                            fontSize: '1rem', 
-                            boxSizing: 'border-box'
-                        }}
-                    />
-                </form>
+                <div ref={searchRef} style={{ flex: 1, maxWidth: '600px', position: 'relative', margin: '0 30px' }}>
+                    <form onSubmit={handleSearchSubmit} style={{ width: '100%' }}>
+                        <input 
+                            type="text" 
+                            placeholder="Tìm phim hoặc bài hát..." 
+                            value={keyword}
+                            onChange={handleInputChange} 
+                            onFocus={() => keyword && suggestions.length > 0 && setShowSearchDropdown(true)}
+                            style={{ 
+                                width: '100%', 
+                                padding: '0 20px',
+                                height: '40px',
+                                background: '#222', 
+                                border: '1px solid #333', 
+                                color: 'white', 
+                                borderRadius: '20px',
+                                outline: 'none', 
+                                fontSize: '1rem', 
+                                boxSizing: 'border-box'
+                            }}
+                        />
+                    </form>
 
-                {showSearchDropdown && suggestions.length > 0 && (
-                    <div style={{
-                        position: 'absolute', top: '50px', left: 0, width: '100%',
-                        background: '#1e1e1e', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.8)',
-                        overflow: 'hidden', border: '1px solid #333'
-                    }}>
-                        {suggestions.map((item, index) => (
-                            <div key={index} onClick={() => handleSelectSuggestion(item)} className="search-item"
-                                style={{ padding: '10px 15px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', borderBottom: '1px solid #333' }}>
-                                <img 
-                                    src={item.image} 
-                                    style={{ width: '40px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} 
-                                    alt="" 
-                                />
-                                <div>
-                                    <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</div>
-                                    <div style={{ color: '#aaa', fontSize: '0.75rem' }}>
-                                        {item.type === 'movie' ? '🎬 Phim' : '🎵 Nhạc'} • {item.sub}
+                    {showSearchDropdown && suggestions.length > 0 && (
+                        <div style={{
+                            position: 'absolute', top: '50px', left: 0, width: '100%',
+                            background: '#1e1e1e', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.8)',
+                            overflow: 'hidden', border: '1px solid #333'
+                        }}>
+                            {suggestions.map((item, index) => (
+                                <div key={index} onClick={() => handleSelectSuggestion(item)} className="search-item"
+                                    style={{ padding: '10px 15px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', borderBottom: '1px solid #333' }}>
+                                    <img 
+                                        src={item.image} 
+                                        style={{ width: '40px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} 
+                                        alt="" 
+                                    />
+                                    <div>
+                                        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</div>
+                                        <div style={{ color: '#aaa', fontSize: '0.75rem' }}>
+                                            {item.type === 'movie' ? '🎬 Phim' : '🎵 Nhạc'} • {item.sub}
+                                        </div>
                                     </div>
                                 </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            
+                {/* 🟢 KHU VỰC TÀI KHOẢN ĐÃ ĐƯỢC CẬP NHẬT */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}>
+                    {user ? (
+                        <Link to="/profile" className="user-profile-btn">
+                            <div className="user-avatar">
+                                {user.fullName.charAt(0).toUpperCase()}
                             </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-           
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}>
-                {user ? (
-                    <>
-                        <span style={{ color: 'white', fontWeight: 'bold' }}>Xin chào, {user.fullName}</span>
-                        <button onClick={handleLogout} style={{ padding: '8px 15px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer' }}>
-                            Đăng xuất
+                            <span className="user-name-text">{user.fullName}</span>
+                        </Link>
+                    ) : (
+                        <button onClick={() => navigate('/login')} style={{ padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: 'bold' }}>
+                            Đăng Nhập
                         </button>
-                    </>
-                ) : (
-                    <>
-                        <button onClick={() => navigate('/login')} style={{ padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer' }}>
-                            Đăng Nhập / Đăng Ký 
-                        </button>
-                    </>
-                )}
-            </div>
+                    )}
+                </div>
 
-        </nav>
+            </nav>
+
+            {/* 🟢 STYLE CHO KHU VỰC USER PROFILE NẰM TRONG HEADER */}
+            <style dangerouslySetInnerHTML={{__html: `
+                .user-profile-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    text-decoration: none;
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    padding: 5px 15px 5px 5px;
+                    border-radius: 30px;
+                    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                    cursor: pointer;
+                }
+
+                .user-profile-btn:hover {
+                    background: rgba(255, 255, 255, 0.15);
+                    border-color: rgba(255, 255, 255, 0.3);
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+                }
+
+                .user-profile-btn:active {
+                    transform: scale(0.95);
+                }
+
+                .user-avatar {
+                    width: 35px;
+                    height: 35px;
+                    background: linear-gradient(135deg, #e50914, #ff5722);
+                    color: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 900;
+                    font-size: 1.1rem;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+                    transition: all 0.3s ease;
+                }
+
+                .user-profile-btn:hover .user-avatar {
+                    box-shadow: 0 0 15px rgba(229, 9, 20, 0.6);
+                    transform: rotate(10deg) scale(1.05);
+                }
+
+                .user-name-text {
+                    color: white;
+                    font-weight: bold;
+                    font-size: 0.95rem;
+                    max-width: 120px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+            `}} />
+        </>
     );
 }
 

@@ -9,23 +9,33 @@ const LoginPage = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    
+    const [emailPrefix, setEmailPrefix] = useState('');
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    // 🟢 HÀM XỬ LÝ KHI NGƯỜI DÙNG GÕ EMAIL
+    const handleEmailChange = (e) => {
+        let value = e.target.value;
+        // Chặn không cho nhập ký tự @ hoặc dấu cách
+        value = value.replace(/[@\s]/g, ''); 
+        setEmailPrefix(value);
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
-        
+        const fullEmail = emailPrefix ? `${emailPrefix}@gmail.com` : '';
         const endpoint = isLogin ? '/api/login' : '/api/register';
         
         try {
             const response = await fetch(`http://localhost:5000${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify({ ...formData, email: fullEmail })
             });
             const data = await response.json();
             
@@ -36,7 +46,11 @@ const LoginPage = () => {
                         alert('🎉 Chào mừng Admin! Bạn sẽ được chuyển đến trang quản trị.');
                         window.location.href = '/admin';
                     }else {
-                    window.location.href = '/'; 
+                        if (!data.user.isOnboarded) {
+                            window.location.href = '/onboarding';
+                        } else {
+                            window.location.href = '/'; 
+                        }
                 }
                 } else {
                     alert('🎉 Đăng ký thành công! Vui lòng đăng nhập để trải nghiệm.');
@@ -66,7 +80,7 @@ const LoginPage = () => {
                     <div className={`slider ${isLogin ? 'left' : 'right'}`}></div>
                 </div>
 
-                <h2 className="title">{isLogin ? 'Mừng Trở Lại!' : 'Tạo Tài Khoản Mới'}</h2>
+                <h2 className="title">{isLogin ? 'Chào Mừng Trở Lại!' : 'Tạo Tài Khoản Mới'}</h2>
                 
                 {error && <div className="error-box">{error}</div>}
 
@@ -80,10 +94,24 @@ const LoginPage = () => {
                                 <input type="text" name="fullName" required={!isLogin} value={formData.fullName} onChange={handleChange} placeholder=" " />
                                 <label>Họ và Tên</label>
                             </div>
-                            <div className="input-group">
-                                <input type="email" name="email" required={!isLogin} value={formData.email} onChange={handleChange} placeholder=" " />
-                                <label>Email của bạn</label>
+                            
+                            {/* 🟢 CẤU TRÚC EMAIL ADDON MỚI TÍCH HỢP FLOATING LABEL */}
+                            <div className="input-group email-group">
+                                <div className="email-wrapper">
+                                    <input 
+                                        type="text" 
+                                        name="email" 
+                                        required={!isLogin} 
+                                        value={emailPrefix} 
+                                        onChange={handleEmailChange} 
+                                        placeholder=" " 
+                                        className="email-input-field"
+                                    />
+                                    <span className="email-addon">@gmail.com</span>
+                                </div>
+                                <label>Tên tài khoản Email</label>
                             </div>
+
                             <div className="input-row">
                                 <div className="input-group" style={{ flex: 1 }}>
                                     <input type="number" name="birthYear" required={!isLogin} value={formData.birthYear} onChange={handleChange} placeholder=" " />
@@ -225,7 +253,7 @@ const LoginPage = () => {
                 }
                 .slider.right { transform: translateX(100%); }
 
-                /* HIỆU ỨNG FLOATING LABEL CHO INPUT */
+                /* HIỆU ỨNG FLOATING LABEL CHO INPUT BÌNH THƯỜNG */
                 .input-group {
                     position: relative;
                     margin-bottom: 22px;
@@ -233,7 +261,7 @@ const LoginPage = () => {
                 }
                 .input-row { display: flex; gap: 15px; }
                 
-                .input-group input, .select-input {
+                .input-group input:not(.email-input-field), .select-input {
                     width: 100%;
                     padding: 16px 15px;
                     background: rgba(255,255,255,0.03);
@@ -257,13 +285,15 @@ const LoginPage = () => {
                     background: transparent;
                 }
 
-                .input-group input:focus, .input-group input:not(:placeholder-shown) {
+                .input-group input:not(.email-input-field):focus, 
+                .input-group input:not(.email-input-field):not(:placeholder-shown) {
                     background: rgba(255,255,255,0.06);
                     border-color: #e50914;
                     box-shadow: 0 0 15px rgba(229,9,20,0.15);
                 }
 
-                .input-group input:focus ~ label, .input-group input:not(:placeholder-shown) ~ label {
+                .input-group input:not(.email-input-field):focus ~ label, 
+                .input-group input:not(.email-input-field):not(:placeholder-shown) ~ label {
                     top: 0; left: 12px;
                     font-size: 0.8rem;
                     color: #e50914;
@@ -272,6 +302,82 @@ const LoginPage = () => {
                     font-weight: bold;
                     border-radius: 4px;
                 }
+
+                /* ========================================================= */
+                /* 🟢 SỬA CHỮA CSS RIÊNG CHO KHỐI EMAIL ADDON (KHÔNG TRÀN CHỮ) */
+                /* ========================================================= */
+                
+                .email-group {
+                    position: relative; /* Đảm bảo làm gốc tọa độ cho label bay lên */
+                }
+
+                .email-wrapper {
+                    display: flex;
+                    align-items: center;
+                    background: rgba(255,255,255,0.03);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    border-radius: 12px;
+                    transition: all 0.3s;
+                    overflow: hidden;
+                    box-sizing: border-box;
+                    width: 100%;
+                }
+
+                .email-wrapper:focus-within {
+                    background: rgba(255,255,255,0.06);
+                    border-color: #e50914;
+                    box-shadow: 0 0 15px rgba(229,9,20,0.15);
+                }
+
+                .email-input-field {
+                    flex: 1;
+                    background: transparent;
+                    border: none;
+                    color: white;
+                    padding: 16px 15px;
+                    font-size: 1rem;
+                    outline: none;
+                }
+
+                .email-addon {
+                    background: rgba(255, 255, 255, 0.08);
+                    color: #ccc;
+                    padding: 16px 15px;
+                    font-size: 0.95rem;
+                    font-weight: bold;
+                    border-left: 1px solid rgba(255,255,255,0.1);
+                    user-select: none;
+                }
+
+                /* Xử lý Floating Label cho Email */
+                .email-group label {
+                    position: absolute;
+                    top: 50%;
+                    left: 15px;
+                    transform: translateY(-50%);
+                    color: #888;
+                    pointer-events: none;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    z-index: 5;
+                    /* Bắt buộc phải có nền trong suốt ban đầu */
+                    background: transparent; 
+                }
+
+                /* Khi ô input đang focus, HOẶC đã có chữ -> Đẩy nhãn lên */
+                .email-wrapper:focus-within + label,
+                .email-wrapper:has(.email-input-field:not(:placeholder-shown)) + label {
+                    top: 0; 
+                    left: 12px;
+                    font-size: 0.8rem;
+                    color: #e50914;
+                    /* Nền màu xám đậm trùng với Form để CHE ĐI ĐƯỜNG VIỀN BÊN DƯỚI */
+                    background: #141414; 
+                    padding: 0 6px;
+                    font-weight: bold;
+                    border-radius: 4px;
+                    z-index: 10;
+                }
+
 
                 /* QUÊN MẬT KHẨU */
                 .forgot-password {
