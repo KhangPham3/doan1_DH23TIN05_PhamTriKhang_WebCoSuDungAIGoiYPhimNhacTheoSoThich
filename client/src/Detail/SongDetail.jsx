@@ -8,21 +8,27 @@ const SongDetail = () => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     
+    // --- STATE PHÂN TRANG ---
     const [relatedSongs, setRelatedSongs] = useState([]); 
+    const [visibleRelatedCount, setVisibleRelatedCount] = useState(5); 
+
     const [aiRecommendedSongs, setAiRecommendedSongs] = useState([]);
+    const [visibleAiCount, setVisibleAiCount] = useState(5); // 🟢 Thêm phân trang cho AI
+
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
 
-    // STATE LƯU TRỮ
+    // STATE LƯU TRỮ TƯƠNG TÁC
     const [likeStatus, setLikeStatus] = useState(null); 
     const [userRating, setUserRating] = useState(0);    
     const [hoverStar, setHoverStar] = useState(0);
     const [stats, setStats] = useState({ views: 0, likes: 0, dislikes: 0, avgRating: 0, rateCount: 0 });
 
-    // 🟢 SỬA LỖI: RESET LẠI CẢM XÚC VÀ ĐÁNH GIÁ KHI ĐỔI BÀI HÁT MỚI
     useEffect(() => {
         setLikeStatus(null);
         setUserRating(0);
         setHoverStar(0);
+        setVisibleRelatedCount(5); 
+        setVisibleAiCount(5); // 🟢 Reset hiển thị AI khi đổi bài
     }, [id]);
 
     useEffect(() => {
@@ -36,7 +42,7 @@ const SongDetail = () => {
             if (result && result.related) {
                 const formattedRelated = result.related
                     .filter(s => s.videoId && s.videoId !== id) 
-                    .slice(0, 10) 
+                    .slice(0, 25) 
                     .map(s => ({
                         id: s.videoId, title: s.title,
                         artist: s.artists ? s.artists.map(a => a.name).join(', ') : 'Unknown',
@@ -54,7 +60,18 @@ const SongDetail = () => {
                 const songIds = await res.json();
                 
                 if (Array.isArray(songIds) && songIds.length > 0) {
-                    const filteredIds = songIds.filter(sid => sid !== id).slice(0, 10);
+                    let filteredIds = songIds.filter(sid => sid !== id);
+                    
+                    // 🟢 MỚI: THUẬT TOÁN XÁO TRỘN NGẪU NHIÊN (Fisher-Yates Shuffle)
+                    // Đảm bảo mỗi lần F5 hoặc qua bài mới, danh sách 40 bài sẽ bị xáo trộn vị trí
+                    for (let i = filteredIds.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [filteredIds[i], filteredIds[j]] = [filteredIds[j], filteredIds[i]];
+                    }
+
+                    // Sau khi xáo trộn, bốc ngẫu nhiên 20 bài để fetch (giảm tải API)
+                    filteredIds = filteredIds.slice(0, 20); 
+
                     const promises = filteredIds.map(sid => fetchSongDetailAI(sid));
                     const detailsRaw = await Promise.all(promises);
                     
@@ -123,7 +140,7 @@ const SongDetail = () => {
             
             {/* --- TRÌNH PHÁT NHẠC --- */}
             <div className="music-player-section">
-                <div className="player-glow"></div> {/* Hiệu ứng phát sáng đằng sau */}
+                <div className="player-glow"></div> 
                 <div className="player-container animate-fade-up">
                     <div className="video-wrapper">
                         <iframe 
@@ -144,7 +161,6 @@ const SongDetail = () => {
             {/* --- CONTAINER CHÍNH --- */}
             <div className="content-container">
                 
-                {/* BẢNG ĐIỀU KHIỂN TƯƠNG TÁC */}
                 <div className="action-panel animate-fade-up" style={{ animationDelay: '0.2s' }}>
                     <div className="stats-row">
                         <span><i className="icon">🎧</i> <strong className="stat-num">{stats.views}</strong> lượt nghe</span>
@@ -154,12 +170,8 @@ const SongDetail = () => {
 
                     <div className="actions-row">
                         <div className="btn-group">
-                            <button className={`action-btn ${likeStatus === 'LIKE' ? 'active-like' : ''}`} onClick={() => handleLikeStatus('LIKE')}>
-                                👍 Thích
-                            </button>
-                            <button className={`action-btn ${likeStatus === 'DISLIKE' ? 'active-dislike' : ''}`} onClick={() => handleLikeStatus('DISLIKE')}>
-                                👎 Không
-                            </button>
+                            <button className={`action-btn ${likeStatus === 'LIKE' ? 'active-like' : ''}`} onClick={() => handleLikeStatus('LIKE')}>👍 Thích</button>
+                            <button className={`action-btn ${likeStatus === 'DISLIKE' ? 'active-dislike' : ''}`} onClick={() => handleLikeStatus('DISLIKE')}>👎 Không</button>
                         </div>
                         
                         <div className="rating-box">
@@ -177,42 +189,55 @@ const SongDetail = () => {
                     </div>
                 </div>
 
-                {/* LỜI BÀI HÁT */}
                 {!loading && data?.lyrics && (
                     <div className="lyrics-section animate-fade-up" style={{ animationDelay: '0.3s' }}>
                         <h3 className="section-heading border-left-green">📝 Lời bài hát</h3>
-                        <div className="lyrics-box">
-                            {data.lyrics}
-                        </div>
+                        <div className="lyrics-box">{data.lyrics}</div>
                     </div>
                 )}
 
-                {/* BÀI HÁT TƯƠNG TỰ */}
+                {/* --- BÀI HÁT TƯƠNG TỰ --- */}
                 {relatedSongs.length > 0 && (
                     <div className="section-margin animate-fade-up" style={{ animationDelay: '0.4s' }}>
                         <h3 className="section-heading border-left-green">🎧 Bài hát cùng thể loại</h3>
                         <div className="media-grid">
-                            {relatedSongs.map(s => (
+                            {relatedSongs.slice(0, visibleRelatedCount).map(s => (
                                 <Card key={s.id} id={s.id} type="song" title={s.title} image={s.image} subtitle={s.artist} />
                             ))}
                         </div>
+                        
+                        {visibleRelatedCount < relatedSongs.length && (
+                            <div className="load-more-container">
+                                <button className="load-more-btn" onClick={() => setVisibleRelatedCount(p => p + 5)}>
+                                    Hiển thị thêm 👇
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {/* GỢI Ý AI */}
+                {/* 🟢 PLAYLIST AI ĐÃ THÊM TÍNH NĂNG LOAD MORE */}
                 {currentUser && aiRecommendedSongs.length > 0 && (
                     <div className="section-margin animate-fade-up" style={{ animationDelay: '0.5s' }}>
-                        <h3 className="section-heading border-left-blue">✨ Playlist dành riêng cho bạn</h3>
+                        <h3 className="section-heading border-left-blue">✨ Có thể bạn sẽ thích</h3>
                         <div className="media-grid">
-                            {aiRecommendedSongs.map(s => (
+                            {aiRecommendedSongs.slice(0, visibleAiCount).map(s => (
                                 <Card key={s.id} id={s.id} type="song" title={s.title} image={s.image} subtitle={s.artist} />
                             ))}
                         </div>
+
+                        {/* Nút Load More cho AI */}
+                        {visibleAiCount < aiRecommendedSongs.length && (
+                            <div className="load-more-container">
+                                <button className="load-more-btn" style={{borderColor: '#00bcd4'}} onClick={() => setVisibleAiCount(p => p + 5)}>
+                                    Khám phá thêm Gợi ý
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
 
-            {/* --- CSS TÍCH HỢP --- */}
             <style dangerouslySetInnerHTML={{__html: `
                 .music-player-section { position: relative; padding: 100px 5% 50px; display: flex; justify-content: center; background: radial-gradient(circle at top, #1a2c20 0%, #0a0a0a 60%); }
                 .player-glow { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); width: 60%; height: 50%; background: #1db954; filter: blur(150px); opacity: 0.15; z-index: 1; pointer-events: none; }
@@ -227,7 +252,6 @@ const SongDetail = () => {
 
                 .content-container { padding: 0 5%; position: relative; z-index: 5; }
                 
-                /* Action Panel Glassmorphism */
                 .action-panel { background: rgba(20,20,20,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 25px 35px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 20px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
                 .stats-row { display: flex; gap: 40px; color: #aaa; font-size: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; flex-wrap: wrap; }
                 .stat-num { color: white; font-size: 1.3rem; margin-left: 5px; }
@@ -235,7 +259,7 @@ const SongDetail = () => {
                 .actions-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
                 
                 .btn-group { display: flex; gap: 15px; }
-                .action-btn { display: flex; align-items: center; gap: 8px; padding: 12px 30px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #ccc; cursor: pointer; font-weight: bold; font-size: 1rem; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+                .action-btn { display: flex; align-items: center; gap: 8px; padding: 12px 30px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #ccc; cursor: pointer; font-weight: bold; font-size: 1rem; transition: all 0.3s; }
                 .action-btn:hover { background: rgba(255,255,255,0.1); color: white; transform: translateY(-2px); }
                 .action-btn:active { transform: scale(0.95); }
                 .active-like { background: linear-gradient(45deg, #1db954, #128c3c); border-color: transparent; color: white; box-shadow: 0 10px 20px rgba(29, 185, 84, 0.4); }
@@ -244,12 +268,11 @@ const SongDetail = () => {
                 .rating-box { display: flex; align-items: center; gap: 15px; background: rgba(0,0,0,0.4); padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.05); }
                 .rating-text { color: #ccc; font-weight: bold; font-size: 0.95rem; }
                 .stars-container { display: flex; gap: 5px; }
-                .star { color: #444; cursor: pointer; font-size: 2rem; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); line-height: 1; }
+                .star { color: #444; cursor: pointer; font-size: 2rem; transition: all 0.2s; line-height: 1; }
                 .star-active { color: #ffc107; text-shadow: 0 0 15px rgba(255, 193, 7, 0.8); transform: scale(1.1); }
                 
                 .lyrics-section { margin-top: 50px; }
                 .lyrics-box { white-space: pre-wrap; line-height: 1.9; color: #ccc; font-size: 1.05rem; background: rgba(255,255,255,0.02); padding: 40px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05); max-height: 500px; overflow-y: auto; text-align: center; font-style: italic; }
-                /* Tùy chỉnh thanh cuộn cho Lời bài hát */
                 .lyrics-box::-webkit-scrollbar { width: 8px; }
                 .lyrics-box::-webkit-scrollbar-track { background: transparent; }
                 .lyrics-box::-webkit-scrollbar-thumb { background: rgba(29, 185, 84, 0.5); border-radius: 10px; }
@@ -259,6 +282,11 @@ const SongDetail = () => {
                 .section-heading { font-size: 1.6rem; margin-bottom: 25px; color: #fff; }
                 .border-left-green { border-left: 5px solid #1db954; padding-left: 15px; }
                 .border-left-blue { border-left: 5px solid #00bcd4; padding-left: 15px; }
+
+                /* CSS CHO NÚT LOAD MORE */
+                .load-more-container { text-align: center; margin-top: 40px; }
+                .load-more-btn { padding: 12px 40px; background: transparent; color: white; border: 2px solid #1db954; border-radius: 30px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: all 0.3s; }
+                .load-more-btn:hover { background: rgba(255,255,255,0.1); box-shadow: 0 10px 20px rgba(255,255,255,0.1); transform: translateY(-3px); }
 
                 @keyframes fadeUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
                 .animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }

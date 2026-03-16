@@ -1,95 +1,91 @@
-import pyodbc
 import random
+import urllib.parse
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine, text
 
-# --- CẤU HÌNH KẾT NỐI ---
-conn = pyodbc.connect(
-    'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=localhost;'
-    'DATABASE=RecommenderDB;'
-    'UID=ADMIN;PWD=KhangPham2005'
-)
-cursor = conn.cursor()
+# ==========================================
+# CẤU HÌNH DATABASE
+# ==========================================
+conn_str = "DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=RecommenderDB;UID=ADMIN;PWD=KhangPham2005"
+params = urllib.parse.quote_plus(conn_str)
+DB_URL = f"mssql+pyodbc:///?odbc_connect={params}"
+engine = create_engine(DB_URL)
 
-print("🚀 Bắt đầu tạo dữ liệu giả lập có chiều sâu cho AI (Collaborative Filtering)...")
+# ==========================================
+# DỮ LIỆU MẪU CHUẨN (REAL IDs)
+# ==========================================
+MOVIE_IDS = ['299534', '27205', '157336', '496243', '129', '597', '634649', '238', '155', '680', '550', '13', '122', '603', '11', '808', '862', '284053', '24428', '99861', '100402', '118340', '284054', '389', '424']
+MOVIE_GENRES = ['28', '12', '16', '35', '80', '99', '18', '10751', '14', '36', '27', '10402', '9648', '10749', '878']
 
-# 1. TẠO 100 USER GIẢ
-print("1️⃣ Đang tạo 100 User mẫu...")
-for i in range(1, 101): 
-    try:
-        cursor.execute("SELECT COUNT(*) FROM Users WHERE Username = ?", (f'user{i}',))
-        if cursor.fetchone()[0] == 0:
-            cursor.execute(f"INSERT INTO Users (Username, PasswordHash, FullName, Email, BirthYear, Gender) VALUES ('user{i}', '123', 'User AI {i}', 'user{i}@test.com', 2000, 'Nam')")
-    except:
-        pass
-conn.commit()
+SONG_IDS = ['kJQP7kiw5Fk', 'fJ9rUzIMcZQ', '9bZkp7q19f0', 'gdZLi9oWNZg', '4NRXx6U8ABQ', 'JGwWNGJdvx8', 'RgKAFK5djSk', '09R8_2nJtjg', '2Vv-BfVoq4g', 'CevxZvSJLk8', 'YQHsXMglC9A', 'lp-EO5I60KA', 'OPf0YbXqDm0', '0yW7w8F2TVA', 'PT2_F-1esPk', 'hT_nvWreIhg', '3JZ_D3ELwOQ', 'SlPhMPnQ58k']
+SONG_GENRES = ['Pop', 'Rap', 'Ballad', 'R&B', 'EDM', 'Indie', 'Rock', 'Acoustic']
 
-cursor.execute("SELECT UserID FROM Users WHERE Username LIKE 'user%'")
-valid_user_ids = [row[0] for row in cursor.fetchall()]
+ACTION_TYPES = ['VIEW', 'VIEW', 'VIEW', 'LIKE', 'LIKE', 'DISLIKE', 'RATE_1', 'RATE_2', 'RATE_3', 'RATE_4', 'RATE_5']
 
-# ---------------------------------------------------------
-# 2. XÂY DỰNG 3 NHÓM SỞ THÍCH (PERSONAS/CLUSTERS)
-# Việc này giúp AI nhận diện các nhóm người dùng giống nhau
-# ---------------------------------------------------------
+def generate_random_date():
+    end = datetime.now()
+    start = end - timedelta(days=365)
+    return start + timedelta(seconds=random.randint(0, int((end - start).total_seconds())))
 
-# NHÓM 1: Fan Phim Hành Động (Marvel/Sci-Fi) + Nhạc Sôi Động (EDM/Rap)
-group_1_movies = ['299534', '299536', '19995', '634649', '157336', '27205', '603'] # Endgame, Infinity War, Avatar, Interstellar...
-group_1_songs = ['YykjpeuMNEk', 'ALZHF5UqnU4', '09R8_2nJtjg', 'tvTRZJ-4EyI', 'QvswgfCWq1I'] # Faded, Shape of You, Nhạc Rap/EDM...
+def seed_data():
+    with engine.connect() as conn:
+        print("Xóa dữ liệu cũ để tránh trùng lặp...")
+        conn.execute(text("DELETE FROM UserInteractions"))
+        # Giữ lại admin, chỉ xóa user test (giả sử user test có email dạng test@)
+        conn.execute(text("DELETE FROM Users WHERE Email LIKE 'testuser%@gmail.com'"))
+        conn.commit()
 
-# NHÓM 2: Fan Phim Tình Cảm/Drama + Nhạc Pop Nhẹ Nhàng (V-Pop, Ballad)
-group_2_movies = ['597', '11036', '313369', '32280', '11216', '332562', '453'] # Titanic, The Notebook, La La Land, Mắt Biếc...
-group_2_songs = ['0Sjc0hQ3G7Q', 'x181GgqHl8I', '7wtfhZwyrcc', '450p7goxZqg'] # Nơi này có anh, Chạy ngay đi, All of me...
+        print("Đang tạo 50 Users...")
+        user_ids = []
+        for i in range(1, 51):
+            username = f"testuser{i}"
+            fullname = f"Người Dùng {i}"
+            email = f"testuser{i}@gmail.com"
+            gender = random.choice(['Nam', 'Nữ', 'Khác'])
+            birth_year = random.randint(1980, 2008)
+            
+            query = text("""
+                INSERT INTO Users (Username, PasswordHash, FullName, Email, BirthYear, Gender, IsOnboarded) 
+                OUTPUT INSERTED.UserID
+                VALUES (:u, 'hashed_pass', :f, :e, :b, :g, 1)
+            """)
+            result = conn.execute(query, {"u": username, "f": fullname, "e": email, "b": birth_year, "g": gender})
+            user_ids.append(result.scalar())
+        conn.commit()
 
-# NHÓM 3: Fan Phim Kinh Dị/Hoạt Hình + Nhạc Lofi
-group_3_movies = ['274', '423', '129', '13', '120', '121', '122'] # Vùng đất linh hồn, Spirited away, LOTR...
-group_3_songs = ['Llw9Q6akRo4', 'kN0iD0pI3o0', 'fnPN-qG42NU', 'dQw4w9WgXcQ'] # Lofi, Chill...
+        print("Đang tạo 1000+ Tương tác (Interactions) & Onboarding...")
+        interactions = []
+        for uid in user_ids:
+            # 1. Sinh dữ liệu Onboarding (Sở thích ban đầu)
+            num_movie_prefs = random.randint(2, 5)
+            for genre in random.sample(MOVIE_GENRES, num_movie_prefs):
+                interactions.append({"uid": uid, "iid": genre, "itype": "movie", "act": "PREFER_MOVIE", "dt": generate_random_date()})
+                
+            num_song_prefs = random.randint(2, 5)
+            for genre in random.sample(SONG_GENRES, num_song_prefs):
+                interactions.append({"uid": uid, "iid": genre, "itype": "song", "act": "PREFER_SONG", "dt": generate_random_date()})
 
-print("2️⃣ Đang thiết lập ma trận sở thích (Like/View) cho các User...")
-interaction_count = 0
+            # 2. Sinh dữ liệu tương tác thực tế (View, Like, Dislike, Rate)
+            num_interactions = random.randint(15, 30) # Mỗi user có 15-30 tương tác
+            for _ in range(num_interactions):
+                is_movie = random.choice([True, False])
+                item_id = random.choice(MOVIE_IDS) if is_movie else random.choice(SONG_IDS)
+                item_type = "movie" if is_movie else "song"
+                action = random.choice(ACTION_TYPES)
+                
+                interactions.append({
+                    "uid": uid, "iid": item_id, "itype": item_type, "act": action, "dt": generate_random_date()
+                })
 
-# Duyệt qua từng User và gán ngẫu nhiên vào 1 trong 3 Nhóm sở thích
-for user_id in valid_user_ids:
-    cluster = random.choice([1, 2, 3])
-    
-    if cluster == 1:
-        my_movies, my_songs = group_1_movies, group_1_songs
-    elif cluster == 2:
-        my_movies, my_songs = group_2_movies, group_2_songs
-    else:
-        my_movies, my_songs = group_3_movies, group_3_songs
+        # Insert hàng loạt vào DB
+        insert_query = text("""
+            INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType, CreatedAt)
+            VALUES (:uid, :iid, :itype, :act, :dt)
+        """)
+        conn.execute(insert_query, interactions)
+        conn.commit()
 
-    # A. Bơm dữ liệu xem PHIM (Mỗi user xem/like 5-7 phim ruột của nhóm mình)
-    num_movies = random.randint(4, len(my_movies))
-    selected_movies = random.sample(my_movies, num_movies)
-    
-    for movie_id in selected_movies:
-        action = random.choice(['LIKE', 'LIKE', 'VIEW']) # Tỉ lệ LIKE cao để AI học nhanh
-        try:
-            cursor.execute("""
-                IF NOT EXISTS (SELECT 1 FROM UserInteractions WHERE UserID = ? AND ItemID = ? AND ItemType = 'movie')
-                BEGIN
-                    INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType) VALUES (?, ?, 'movie', ?)
-                END
-            """, (user_id, movie_id, user_id, movie_id, action))
-            interaction_count += 1
-        except: pass
+        print(f"✅ Hoàn tất! Đã tạo 50 Users và {len(interactions)} records tương tác.")
 
-    # B. Bơm dữ liệu nghe NHẠC (Mỗi user nghe/like 3-5 bài ruột của nhóm mình)
-    num_songs = random.randint(3, len(my_songs))
-    selected_songs = random.sample(my_songs, num_songs)
-    
-    for song_id in selected_songs:
-        action = random.choice(['LIKE', 'LIKE', 'VIEW'])
-        try:
-            cursor.execute("""
-                IF NOT EXISTS (SELECT 1 FROM UserInteractions WHERE UserID = ? AND ItemID = ? AND ItemType = 'song')
-                BEGIN
-                    INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType) VALUES (?, ?, 'song', ?)
-                END
-            """, (user_id, song_id, user_id, song_id, action))
-            interaction_count += 1
-        except: pass
-
-conn.commit()
-print(f"🎉 HOÀN TẤT! Đã bơm thành công {interaction_count} tương tác chuẩn xác.")
-print("👉 AI hiện tại đã cực kỳ thông minh. Hãy vào web và click thử 1 phim Marvel để xem sự thay đổi!")
-conn.close()
+if __name__ == "__main__":
+    seed_data()

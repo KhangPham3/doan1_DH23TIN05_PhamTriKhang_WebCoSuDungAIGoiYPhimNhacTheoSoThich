@@ -54,9 +54,9 @@ def get_charts():
 
 
 # ==========================================
-# 🧠 CORE AI: ĐÃ TỐI ƯU HÓA HIỆU SUẤT VÀ CACHE
+# CORE AI: ĐÃ TỐI ƯU HÓA HIỆU SUẤT VÀ CACHE
 # ==========================================
-@cached(cache=ai_cache) # 🟢 GẮN CACHE VÀO HÀM NÀY
+@cached(cache=ai_cache) 
 def generate_recommendations(user_id, item_type):
     try:
         user_id = int(user_id)
@@ -83,32 +83,31 @@ def generate_recommendations(user_id, item_type):
 
         df['Rating'] = df['ActionType'].apply(get_rating)
         
-        # 🟢 XỬ LÝ COLD START CHUẨN XÁC: Tách biệt Phim và Nhạc
         cold_start_items = []
         prefer_action = 'PREFER_MOVIE' if item_type == 'movie' else 'PREFER_SONG'
         user_prefers = df[(df['UserID'] == user_id) & (df['ActionType'] == prefer_action)]['ItemID'].dropna().unique().tolist()
         
-        # Lọc df chỉ giữ lại hành vi thật (bỏ SEARCH và PREFER ra khỏi logic tính toán CF)
         action_df = df[~df['ActionType'].isin(['SEARCH', 'PREFER_MOVIE', 'PREFER_SONG'])]
+
+        # MỚI: LẤY DANH SÁCH TUYỆT ĐỐI CÁC TÁC PHẨM ĐÃ BỊ DISLIKE
+        disliked_items = set(action_df[(action_df['UserID'] == user_id) & (action_df['ActionType'] == 'DISLIKE')]['ItemID'].dropna().unique().tolist())
 
         user_actions = action_df[(action_df['UserID'] == user_id) & (action_df['Rating'] >= 3)]
         history_items = user_actions.groupby('ItemID')['Rating'].max().sort_values(ascending=False).index.tolist()[:15]
         
-        # Nếu user không có lịch sử, dùng sở thích đã chọn
         if len(history_items) == 0 and len(user_prefers) > 0:
             try:
                 if item_type == 'movie':
                     genre_query = ",".join(user_prefers)
                     res = requests.get(f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&language=vi-VN&with_genres={genre_query}&sort_by=popularity.desc").json()
                     for m in res.get('results', [])[:15]: cold_start_items.append(str(m['id']))
-                else: # song
+                else: 
                     for tag in user_prefers:
-                        search_res = yt.search(f"{tag} hay nhất", filter='songs', limit=5) # 🟢 Lấy từ khóa trực tiếp
+                        search_res = yt.search(f"{tag} hay nhất", filter='songs', limit=5)
                         for s in search_res: 
                             if 'videoId' in s: cold_start_items.append(s['videoId'])
             except Exception as e:
                 print("Lỗi Cold Start:", e)
-
 
         search_df = df[(df['UserID'] == user_id) & (df['ActionType'] == 'SEARCH')]
         user_searches = search_df['ItemID'].dropna().unique().tolist()[-5:]
@@ -164,19 +163,19 @@ def generate_recommendations(user_id, item_type):
                 if len(suggested) >= 20: break
             personalized_items = [item[0] for item in sorted(suggested.items(), key=lambda x: x[1], reverse=True)[:15]]
 
+        #  LỌC TUYỆT ĐỐI: Loại bỏ tất cả ID nằm trong disliked_items ra khỏi mọi danh sách
         return {
-            "history": [str(x) for x in history_items],
-            "popular": [str(x) for x in popular_items],
-            "age": [str(x) for x in age_items],
-            "gender": [str(x) for x in gender_items],
-            "content_based": [str(x) for x in content_items],
-            "personalized": [str(x) for x in personalized_items],
-            "cold_start": [str(x) for x in cold_start_items] # 🟢 TRẢ VỀ KẾT QUẢ TỪ ONBOARDING
+            "history": [str(x) for x in history_items if str(x) not in disliked_items],
+            "popular": [str(x) for x in popular_items if str(x) not in disliked_items],
+            "age": [str(x) for x in age_items if str(x) not in disliked_items],
+            "gender": [str(x) for x in gender_items if str(x) not in disliked_items],
+            "content_based": [str(x) for x in content_items if str(x) not in disliked_items],
+            "personalized": [str(x) for x in personalized_items if str(x) not in disliked_items],
+            "cold_start": [str(x) for x in cold_start_items if str(x) not in disliked_items]
         }
     except Exception as e:
         print(f"Lỗi Hệ Thống AI: {e}")
         return {"history": [], "popular": [], "age": [], "gender": [], "content_based": [], "personalized": [], "cold_start": []}
-
 
 @app.route('/api/recommend/dashboard', methods=['GET'])
 def recommend_dashboard():
@@ -193,7 +192,7 @@ def recommend_movies():
     res = generate_recommendations(user_id, 'movie')
     # 🟢 Ưu tiên Cold Start lên đầu, sau đó mới đến cá nhân hóa
     final_list = list(dict.fromkeys(res.get('cold_start', []) + res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
-    return jsonify(final_list[:15])
+    return jsonify(final_list[:40])
 
 @app.route('/api/recommend/songs', methods=['GET'])
 def recommend_songs():
@@ -202,7 +201,7 @@ def recommend_songs():
     
     res = generate_recommendations(user_id, 'song')
     final_list = list(dict.fromkeys(res.get('cold_start', []) + res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
-    return jsonify(final_list[:15])
+    return jsonify(final_list[:40])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True, threaded=True)

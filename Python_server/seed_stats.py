@@ -1,54 +1,69 @@
-import pyodbc
+import urllib.parse
 import random
+from sqlalchemy import create_engine, text
 
-conn = pyodbc.connect(
-    'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=localhost;'
-    'DATABASE=RecommenderDB;'
-    'UID=ADMIN;PWD=KhangPham2005'
-)
-cursor = conn.cursor()
+# ==========================================
+# CẤU HÌNH DATABASE
+# ==========================================
+conn_str = "DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=RecommenderDB;UID=ADMIN;PWD=KhangPham2005"
+params = urllib.parse.quote_plus(conn_str)
+DB_URL = f"mssql+pyodbc:///?odbc_connect={params}"
+engine = create_engine(DB_URL)
 
-print("🚀 Đang khởi tạo hàng ngàn dữ liệu thống kê (Views, Likes, Ratings)...")
-
-# Lấy danh sách ID User
-cursor.execute("SELECT UserID FROM Users")
-user_ids = [row[0] for row in cursor.fetchall()]
-
-# Danh sách một vài Phim và Nhạc nổi bật để buff chỉ số
-hot_movies = ['299534', '19995', '313369', '157336', '11216'] # Endgame, Avatar, La La Land...
-hot_songs = ['YykjpeuMNEk', 'ALZHF5UqnU4', '0Sjc0hQ3G7Q', 'Llw9Q6akRo4'] 
-
-interaction_count = 0
-
-def generate_fake_data(item_id, item_type):
-    global interaction_count
-    # 1. Buff Views (Tạo các lượt view từ user ẩn danh - NULL)
-    views = random.randint(50, 500)
-    for _ in range(views):
-        cursor.execute("INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType) VALUES (NULL, ?, ?, 'VIEW')", (item_id, item_type))
-        interaction_count += 1
-
-    # 2. Buff Likes/Dislikes & Ratings từ các user thực tế
-    interacting_users = random.sample(user_ids, random.randint(10, len(user_ids)))
-    
-    for uid in interacting_users:
-        # Tỉ lệ 80% Like, 20% Dislike
-        emotion = 'LIKE' if random.random() > 0.2 else 'DISLIKE'
-        cursor.execute("INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType) VALUES (?, ?, ?, ?)", (uid, item_id, item_type, emotion))
+def seed_stats():
+    with engine.connect() as conn:
+        print("Đang tổng hợp dữ liệu thống kê (ItemStats)...")
         
-        # Đánh giá sao (Thiên về 4 và 5 sao cho phim hot)
-        star = random.choices([1, 2, 3, 4, 5], weights=[5, 5, 10, 40, 40], k=1)[0]
-        cursor.execute("INSERT INTO UserInteractions (UserID, ItemID, ItemType, ActionType) VALUES (?, ?, ?, ?)", (uid, item_id, item_type, f'RATE_{star}'))
-        
-        interaction_count += 2
+        # Đảm bảo bảng ItemStats tồn tại (Nếu chưa có thì tạo)
+        create_table_query = """
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ItemStats' and xtype='U')
+        CREATE TABLE ItemStats (
+            ItemID NVARCHAR(50) NOT NULL,
+            ItemType NVARCHAR(20) NOT NULL,
+            Views INT DEFAULT 0,
+            Likes INT DEFAULT 0,
+            Dislikes INT DEFAULT 0,
+            AvgRating FLOAT DEFAULT 0,
+            RateCount INT DEFAULT 0,
+            PRIMARY KEY (ItemID, ItemType)
+        )
+        """
+        conn.execute(text(create_table_query))
+        conn.execute(text("DELETE FROM ItemStats"))
+        conn.commit()
 
-# Chạy tạo data
-for mid in hot_movies:
-    generate_fake_data(mid, 'movie')
-for sid in hot_songs:
-    generate_fake_data(sid, 'song')
+        # Lấy danh sách toàn bộ ItemID từ bảng Interactions
+        items_query = text("SELECT DISTINCT ItemID, ItemType FROM UserInteractions WHERE ActionType NOT LIKE 'PREFER_%' AND ActionType != 'SEARCH'")
+        items = conn.execute(items_query).fetchall()
 
-conn.commit()
-print(f"🎉 HOÀN TẤT! Đã bơm thành công {interaction_count} lượt tương tác vào cơ sở dữ liệu.")
-conn.close()
+        stats_data = []
+        for item in items:
+            # Tạo dữ liệu ngẫu nhiên nhưng trông thực tế
+            views = random.randint(1000, 50000)
+            likes = int(views * random.uniform(0.05, 0.15))
+            dislikes = int(views * random.uniform(0.001, 0.02))
+            rate_count = int(views * random.uniform(0.02, 0.08))
+            avg_rating = round(random.uniform(3.5, 4.9), 1)
+
+            stats_data.append({
+                "iid": item[0],
+                "itype": item[1],
+                "v": views,
+                "l": likes,
+                "d": dislikes,
+                "ar": avg_rating,
+                "rc": rate_count
+            })
+
+        if stats_data:
+            insert_query = text("""
+                INSERT INTO ItemStats (ItemID, ItemType, Views, Likes, Dislikes, AvgRating, RateCount)
+                VALUES (:iid, :itype, :v, :l, :d, :ar, :rc)
+            """)
+            conn.execute(insert_query, stats_data)
+            conn.commit()
+
+        print(f"✅ Hoàn tất! Đã tạo thống kê cho {len(stats_data)} tác phẩm phim & nhạc.")
+
+if __name__ == "__main__":
+    seed_stats()

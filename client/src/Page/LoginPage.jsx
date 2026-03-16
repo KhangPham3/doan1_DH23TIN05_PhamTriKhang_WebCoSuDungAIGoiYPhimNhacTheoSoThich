@@ -16,7 +16,7 @@ const LoginPage = () => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    // 🟢 HÀM XỬ LÝ KHI NGƯỜI DÙNG GÕ EMAIL
+    //  HÀM XỬ LÝ KHI NGƯỜI DÙNG GÕ EMAIL
     const handleEmailChange = (e) => {
         let value = e.target.value;
         // Chặn không cho nhập ký tự @ hoặc dấu cách
@@ -95,7 +95,7 @@ const LoginPage = () => {
                                 <label>Họ và Tên</label>
                             </div>
                             
-                            {/* 🟢 CẤU TRÚC EMAIL ADDON MỚI TÍCH HỢP FLOATING LABEL */}
+                            {/*  CẤU TRÚC EMAIL ADDON MỚI TÍCH HỢP FLOATING LABEL */}
                             <div className="input-group email-group">
                                 <div className="email-wrapper">
                                     <input 
@@ -304,7 +304,7 @@ const LoginPage = () => {
                 }
 
                 /* ========================================================= */
-                /* 🟢 SỬA CHỮA CSS RIÊNG CHO KHỐI EMAIL ADDON (KHÔNG TRÀN CHỮ) */
+                /*  SỬA CHỮA CSS RIÊNG CHO KHỐI EMAIL ADDON (KHÔNG TRÀN CHỮ) */
                 /* ========================================================= */
                 
                 .email-group {

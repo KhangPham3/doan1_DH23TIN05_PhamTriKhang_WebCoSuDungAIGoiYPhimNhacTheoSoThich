@@ -21,7 +21,7 @@ function MovieDetail() {
     const [hoverStar, setHoverStar] = useState(0);
     const [stats, setStats] = useState({ views: 0, likes: 0, dislikes: 0, avgRating: 0, rateCount: 0 });
 
-    // 🟢 SỬA LỖI: RESET LẠI CẢM XÚC VÀ ĐÁNH GIÁ KHI ĐỔI PHIM MỚI
+    // RESET LẠI CẢM XÚC VÀ ĐÁNH GIÁ KHI ĐỔI PHIM MỚI
     useEffect(() => {
         setLikeStatus(null);
         setUserRating(0);
@@ -217,9 +217,9 @@ function MovieDetail() {
                 {/* GỢI Ý AI */}
                 {currentUser && (
                     <div className="section-margin animate-fade-up" style={{ animationDelay: '0.5s' }}>
-                        <h2 className="gradient-text-blue border-left-blue">✨ Dành riêng cho bạn (AI)</h2>
+                        <h2 className="gradient-text-blue border-left-blue">✨ Dành riêng cho bạn </h2>
                         {loadingAI ? (
-                            <div style={{ textAlign: 'center', color: '#00bcd4' }}>🤖 AI đang phân tích dữ liệu...</div>
+                            <div style={{ textAlign: 'center', color: '#00bcd4' }}>🤖 Hệ thống đang phân tích dữ liệu...</div>
                         ) : aiRecommendedMovies.length > 0 ? (
                             <div className="media-grid">
                                 {aiRecommendedMovies.map(m => (

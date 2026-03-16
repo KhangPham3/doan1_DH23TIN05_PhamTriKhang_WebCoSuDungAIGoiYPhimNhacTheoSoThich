@@ -13,7 +13,7 @@ const ForgotPasswordPage = () => {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
-    // 🟢 HÀM XỬ LÝ NHẬP EMAIL (Ghim @gmail.com)
+    //  HÀM XỬ LÝ NHẬP EMAIL (Ghim @gmail.com)
     const handleEmailChange = (e) => {
         let value = e.target.value;
         value = value.replace(/[@\s]/g, ''); 
