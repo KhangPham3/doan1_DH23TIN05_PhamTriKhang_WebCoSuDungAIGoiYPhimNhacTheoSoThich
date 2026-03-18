@@ -1,47 +1,69 @@
 import React, { useState, useEffect } from 'react';
+import { searchMovies, IMAGE_URL } from '../API/tmdbAPI';
+import { searchMusic } from '../API/MusicAPI';
 import Card from '../Components/UI/Card';
-import { API_KEY, BASE_URL, IMAGE_URL } from '../API/tmdbAPI';
-import { fetchSongDetailAI } from '../API/MusicAPI';
 
 const RecommendPage = () => {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    
+    // --- STATE CHO CHAT GEMINI ---
+    const [prompt, setPrompt] = useState('');
+    const [loadingGemini, setLoadingGemini] = useState(false);
+    const [aiResults, setAiResults] = useState(null); 
+    
+    // --- STATE CHO GỢI Ý MẶC ĐỊNH (SQL) ---
     const [activeTab, setActiveTab] = useState('movie'); // 'movie' hoặc 'song'
-    const [loading, setLoading] = useState(true);
+    const [loadingDefault, setLoadingDefault] = useState(true);
+    const [movieData, setMovieData] = useState({ history: [], popular: [], age: [], gender: [], content_based: [], personalized: [] });
+    const [songData, setSongData] = useState({ history: [], popular: [], age: [], gender: [], content_based: [], personalized: [] });
 
-    const [movieData, setMovieData] = useState({ history: [], popular: [], age: [], content_based: [], personalized: [] });
-    const [songData, setSongData] = useState({ history: [], popular: [], age: [], content_based: [], personalized: [] });
+    const suggestedPrompts = [
+        "Tôi đang rất buồn, cần phim và nhạc chữa lành ",
+        "Gợi ý list nhạc cực căng để tập Gym ",
+        "Những bộ phim có cú twist 'hack não' nhất ",
+        "Nhạc chill nhẹ nhàng để làm việc vào ban đêm "
+    ];
 
-    const user = JSON.parse(localStorage.getItem('currentUser'));
-
+    // ==========================================
+    // 1. LẤY GỢI Ý MẶC ĐỊNH THEO TỪNG HẠNG MỤC
+    // ==========================================
     useEffect(() => {
-        if (!user || !user.id) return;
+        if (!currentUser || !currentUser.id) return;
 
-        const loadAIData = async () => {
-            setLoading(true);
+        const loadDefaultData = async () => {
+            setLoadingDefault(true);
             try {
                 // Gọi API Phân tích sâu (Tuổi, Giới tính, Lịch sử...)
                 const [mRes, sRes] = await Promise.all([
-                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${user.id}&type=movie`),
-                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${user.id}&type=song`)
+                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${currentUser.id}&type=movie`),
+                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${currentUser.id}&type=song`)
                 ]);
                 const mIds = await mRes.json();
                 const sIds = await sRes.json();
 
+                // Hàm fetch Phim từ TMDB (An toàn, bỏ qua lỗi)
                 const fetchMovies = async (ids) => {
                     if (!ids || ids.length === 0) return [];
-                    const p = ids.map(id => fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN`).then(r => r.json()));
+                    const safeIds = ids.slice(0, 10); // Lấy tối đa 10 cái cho mỗi mục
+                    const p = safeIds.map(id => 
+                        fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=46f87255f304cb323c76a53abf325782&language=vi-VN`)
+                        .then(r => r.json())
+                        .catch(() => null)
+                    );
                     const res = await Promise.all(p);
-                    return res.filter(m => m && m.id);
+                    return res.filter(m => m && m.id && m.title).map(m => ({
+                        id: m.id, type: 'movie', title: m.title, 
+                        image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Image', 
+                        subtitle: m.release_date?.substring(0, 4)
+                    }));
                 };
 
-                const fetchSongs = async (ids) => {
+                // Hàm fetch Nhạc từ Youtube (Giả lập nhanh dữ liệu để UI không bị đơ)
+                const formatSongs = (ids) => {
                     if (!ids || ids.length === 0) return [];
-                    const p = ids.map(id => fetchSongDetailAI(id));
-                    const res = await Promise.all(p);
-                    return res.filter(s => s && s.info).map(s => ({
-                        id: s.info.videoDetails.videoId,
-                        title: s.info.videoDetails.title,
-                        artist: s.info.videoDetails.author,
-                        image: `https://img.youtube.com/vi/${s.info.videoDetails.videoId}/hqdefault.jpg`
+                    return ids.slice(0, 10).map(id => ({
+                        id: id, type: 'song', title: 'Đang tải...', 
+                        image: `https://img.youtube.com/vi/${id}/hqdefault.jpg`, subtitle: 'Gợi ý AI'
                     }));
                 };
 
@@ -49,41 +71,92 @@ const RecommendPage = () => {
                     history: await fetchMovies(mIds.history),
                     popular: await fetchMovies(mIds.popular),
                     age: await fetchMovies(mIds.age),
+                    gender: await fetchMovies(mIds.gender),
                     content_based: await fetchMovies(mIds.content_based), 
                     personalized: await fetchMovies(mIds.personalized)
                 });
 
                 setSongData({
-                    history: await fetchSongs(sIds.history),
-                    popular: await fetchSongs(sIds.popular),
-                    age: await fetchSongs(sIds.age),
-                    content_based: await fetchSongs(sIds.content_based), 
-                    personalized: await fetchSongs(sIds.personalized)
+                    history: formatSongs(sIds.history),
+                    popular: formatSongs(sIds.popular),
+                    age: formatSongs(sIds.age),
+                    gender: formatSongs(sIds.gender),
+                    content_based: formatSongs(sIds.content_based), 
+                    personalized: formatSongs(sIds.personalized)
                 });
 
-            } catch (error) {
-                console.error("Lỗi tải AI:", error);
-            }
-            setLoading(false);
+            } catch (error) { console.error("Lỗi tải AI mặc định:", error); }
+            setLoadingDefault(false);
         };
+        loadDefaultData();
+    }, [currentUser?.id]);
 
-        loadAIData();
-    }, [user?.id]);
+    // ==========================================
+    // 2. XỬ LÝ CHAT VỚI GEMINI
+    // ==========================================
+    const handleAskGemini = async (textPrompt) => {
+        const finalPrompt = textPrompt || prompt;
+        if (!finalPrompt.trim()) return;
+        
+        setPrompt(finalPrompt);
+        setLoadingGemini(true);
+        setAiResults(null); 
 
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+
+        try {
+            const aiRes = await fetch('http://localhost:8000/api/ai/gemini-chat', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: finalPrompt, userId: currentUser?.id || 0 })
+            });
+            const aiData = await aiRes.json();
+
+            if (aiData.success && aiData.data) {
+                const movieNames = aiData.data.movies || [];
+                const songNames = aiData.data.songs || [];
+
+                const safeSearchMovie = async (name) => {
+                    try { const res = await searchMovies(name); return res && res.length > 0 ? res[0] : null; } 
+                    catch (e) { return null; }
+                };
+
+                const safeSearchMusic = async (name) => {
+                    try { const res = await searchMusic(name); return res && res.length > 0 ? res[0] : null; } 
+                    catch (e) { return null; }
+                };
+
+                const fetchedMovies = await Promise.all(movieNames.map(name => safeSearchMovie(name)));
+                const fetchedSongs = await Promise.all(songNames.map(name => safeSearchMusic(name)));
+
+                const validMovies = fetchedMovies.filter(m => m && m.id).map(m => ({
+                    id: m.id, type: 'movie', title: m.title, image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450', subtitle: m.release_date?.substring(0, 4)
+                }));
+
+                const validSongs = fetchedSongs.filter(s => s && s.videoId).map(s => ({
+                    id: s.videoId, type: 'song', title: s.title, image: s.thumbnails ? s.thumbnails[0].url : 'https://via.placeholder.com/300x300', subtitle: s.artists?.[0]?.name
+                }));
+
+                setAiResults({ movies: validMovies, songs: validSongs });
+            }
+        } catch (error) { alert("Lỗi kết nối Gemini. Vui lòng thử lại!"); }
+        setLoadingGemini(false);
+    };
+
+    // ==========================================
+    // 3. HÀM RENDER CÁC MỤC (SECTION)
+    // ==========================================
     const renderSection = (title, desc, items, type, icon) => {
         if (!items || items.length === 0) return null; 
         return (
-            <div style={{ marginTop: '60px' }}>
-                <h2 style={{ color: type === 'movie' ? '#e50914' : '#1db954', marginBottom: '5px', fontSize: '2rem' }}>{icon} {title}</h2>
-                <p style={{ color: '#888', marginBottom: '30px', fontStyle: 'italic', fontSize: '1rem' }}>{desc}</p>
+            <div className="recommend-category">
+                <h2 className={`category-title ${type === 'movie' ? 'movie-title' : 'song-title'}`}>
+                    <span style={{marginRight: '10px'}}>{icon}</span> {title}
+                </h2>
+                <p className="category-desc">{desc}</p>
                 <div className="media-grid">
                     {items.map((i, idx) => (
                         <div key={i.id || idx} className="animate-fade-up" style={{ animationDelay: `${idx * 0.05}s` }}>
-                            <Card 
-                                id={i.id} type={type} title={i.title}
-                                image={type === 'movie' ? (i.poster_path ? `${IMAGE_URL}${i.poster_path}` : 'https://via.placeholder.com/300x450') : i.image}
-                                subtitle={type === 'movie' ? `⭐ ${i.vote_average?.toFixed(1)}` : i.artist}
-                            />
+                            <Card {...i} />
                         </div>
                     ))}
                 </div>
@@ -91,65 +164,160 @@ const RecommendPage = () => {
         );
     };
 
-    if (!user) return (
+    if (!currentUser) return (
         <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: '#0a0a0a' }}>
             <h1 style={{ fontSize: '3rem', color: '#00bcd4', marginBottom: '10px' }}>🔐 Yêu cầu đăng nhập</h1>
-            <p style={{ color: '#aaa' }}>Hệ thống AI cần biết bạn là ai để có thể phục vụ tốt nhất.</p>
+            <p style={{ color: '#aaa' }}>Trợ lý AI cần biết bạn là ai để có thể gợi ý chính xác nhất.</p>
         </div>
     );
 
     return (
-        <div style={{ paddingTop: '100px', paddingBottom: '100px', paddingLeft: '5%', paddingRight: '5%', background: '#0a0a0a', minHeight: '100vh' }}>
-            <h1 style={{ color: 'white', borderBottom: '1px solid #333', paddingBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginTop: 0 }}>
-                <span style={{ fontSize: '3rem', textShadow: '0 0 20px rgba(0, 188, 212, 0.8)' }}>✨</span>
-                TỔNG HỢP GỢI Ý CHO RIÊNG BẠN
-            </h1>
+        <div className="recommend-page-container">
+            {/* --- KHU VỰC HERO CHAT (GEMINI) --- */}
+            <div className="hero-chat-section">
+                <div className="glow-orb"></div>
+                <div className="hero-content animate-fade-down">
+                    <h1 className="ai-title">✨ Trợ Lý Giải Trí AI</h1>
+                    <p className="ai-subtitle">Tôi đã học sở thích của bạn. Hãy nói cho tôi nghe tâm trạng lúc này, tôi sẽ tìm ra những tác phẩm hoàn hảo nhất!</p>
+                    
+                    <form onSubmit={(e) => { e.preventDefault(); handleAskGemini(); }} className={`chat-form ${loadingGemini ? 'loading-glow' : ''}`}>
+                        <input type="text" className="chat-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Ví dụ: Tôi vừa được thăng chức, hãy cho tôi xem phim và nhạc ăn mừng..." />
+                        <button type="submit" disabled={loadingGemini} className="chat-submit-btn shine-effect">
+                            {loadingGemini ? <div className="spinner"></div> : 'GỬI YÊU CẦU'}
+                        </button>
+                    </form>
 
-            {/* TAB CHUYỂN ĐỔI */}
-            <div style={{ display: 'flex', gap: '20px', marginTop: '40px', justifyContent: 'center' }}>
-                <button 
-                    onClick={() => setActiveTab('movie')}
-                    style={{ padding: '12px 40px', fontSize: '1.2rem', fontWeight: 'bold', borderRadius: '30px', cursor: 'pointer', transition: 'all 0.3s', border: activeTab === 'movie' ? 'none' : '1px solid #333', background: activeTab === 'movie' ? 'linear-gradient(45deg, #e50914, #b20710)' : 'rgba(255,255,255,0.05)', color: 'white', boxShadow: activeTab === 'movie' ? '0 5px 20px rgba(229, 9, 20, 0.5)' : 'none' }}
-                >🎬 ĐIỆN ẢNH</button>
-                <button 
-                    onClick={() => setActiveTab('song')}
-                    style={{ padding: '12px 40px', fontSize: '1.2rem', fontWeight: 'bold', borderRadius: '30px', cursor: 'pointer', transition: 'all 0.3s', border: activeTab === 'song' ? 'none' : '1px solid #333', background: activeTab === 'song' ? 'linear-gradient(45deg, #1db954, #128c3c)' : 'rgba(255,255,255,0.05)', color: 'white', boxShadow: activeTab === 'song' ? '0 5px 20px rgba(29, 185, 84, 0.5)' : 'none' }}
-                >🎵 ÂM NHẠC</button>
+                    <div className="suggestion-chips">
+                        {suggestedPrompts.map((text, idx) => (
+                            <button key={idx} className="chip-btn" onClick={() => handleAskGemini(text)}>{text}</button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
-            {loading ? (
-                <div style={{ textAlign: 'center', marginTop: '100px', color: '#00bcd4' }}>
-                    <div className="modern-spinner" style={{ borderColor: '#00bcd4 transparent #00bcd4 transparent', margin: '0 auto' }}></div>
-                    <h3 style={{ marginTop: '20px', letterSpacing: '2px' }}>ĐANG TẢI DỮ LIỆU...</h3>
-                </div>
-            ) : (
-                <div style={{ marginTop: '20px' }}>
-                    {activeTab === 'movie' ? (
-                        <>
-                            {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc đánh giá trên 3 sao.", movieData.history, 'movie', '❤️')}
-                            {renderSection("Dành Cho Độ Tuổi Của Bạn", "Xu hướng điện ảnh được thế hệ của bạn quan tâm nhất.", movieData.age, 'movie', '🎓')}
-                            {renderSection("Thịnh Hành Cùng Giới Tính", "Những bộ phim đang làm mưa làm gió trong cộng đồng cùng giới tính với bạn.", movieData.gender, 'movie', '👫')}
-                            {renderSection("Có Thể Bạn Sẽ Thích", "Phân tích AI chuyên sâu (Collaborative Filtering) dựa trên những người dùng có chung gu với bạn.", movieData.personalized, 'movie', '🧠')}
-                            {renderSection("Dành Riêng Theo Sở Thích Mở Rộng", "Gợi ý thông minh dựa vào Thể loại, Tác giả và những từ khóa bạn từng tìm kiếm.", movieData.content_based, 'movie', '🎯')}
-                        </>
+            {/* --- KHU VỰC KẾT QUẢ TỪ GEMINI --- */}
+            {(loadingGemini || aiResults) && (
+                <div className="ai-results-section animate-fade-up">
+                    <div className="section-divider">
+                        <span className="divider-text">Kết Quả Phân Tích Của Gemini 🧠</span>
+                    </div>
+
+                    {loadingGemini ? (
+                        <div className="loading-state">
+                            <div className="ai-brain-pulse">🤖</div>
+                            <h3>AI đang phân tích tâm trạng và tìm kiếm trong vũ trụ điện ảnh...</h3>
+                        </div>
                     ) : (
-                        <>
-                            {renderSection("Playlist Yêu Thích", "Những bài hát bạn nghe đi nghe lại hoặc đánh giá cao.", songData.history, 'song', '❤️')}
-                            {renderSection("Giai Điệu Thế Hệ", "Những bản nhạc mang đậm dấu ấn tuổi trẻ của thế hệ bạn.", songData.age, 'song', '🎧')}
-                            {renderSection("Giai Điệu Cùng Giới Tính", "Âm nhạc đang được phái của bạn ưu ái nhất.", songData.gender, 'song', '👫')}
-                            {renderSection("Khám Phá Gu Âm Nhạc Mới", "AI tự động học từ lượt view/like để tìm ra những bài hát hoàn hảo cho bạn.", songData.personalized, 'song', '🧠')}
-                            {renderSection("Dành Riêng Theo Sở Thích Mở Rộng", "Gợi ý thông minh dựa vào Thể loại, Tác giả và những từ khóa bạn từng tìm kiếm.", songData.content_based, 'song', '🎯')}
-                        </>
+                        <div className="results-container">
+                            {aiResults.movies.length > 0 && renderSection("Điện Ảnh Đề Xuất", "Những bộ phim hoàn hảo cho ngữ cảnh của bạn.", aiResults.movies, 'movie', '🎬')}
+                            {aiResults.songs.length > 0 && renderSection("Âm Nhạc Đề Xuất", "Giai điệu phù hợp nhất lúc này.", aiResults.songs, 'song', '🎵')}
+                            
+                            {aiResults.movies.length === 0 && aiResults.songs.length === 0 && (
+                                <div style={{textAlign:'center', color:'#ff4d4d'}}>Không tìm thấy kết quả hợp lệ với cơ sở dữ liệu. Vui lòng thử mô tả khác!</div>
+                            )}
+                        </div>
                     )}
                 </div>
             )}
 
+            {/* --- KHU VỰC GỢI Ý MẶC ĐỊNH CHIA TAB (SQL) --- */}
+            <div className="default-recommend-section animate-fade-up" style={{ animationDelay: '0.4s' }}>
+                <div className="section-divider">
+                    <span className="divider-text">Phân Tích Chuyên Sâu Hôm Nay 🌟</span>
+                </div>
+
+                {/* TAB CHUYỂN ĐỔI */}
+                <div className="tab-container">
+                    <button onClick={() => setActiveTab('movie')} className={`tab-btn ${activeTab === 'movie' ? 'active-movie' : ''}`}>🎬 ĐIỆN ẢNH</button>
+                    <button onClick={() => setActiveTab('song')} className={`tab-btn ${activeTab === 'song' ? 'active-song' : ''}`}>🎵 ÂM NHẠC</button>
+                </div>
+                
+                {loadingDefault ? (
+                    <div style={{ textAlign: 'center', color: '#00bcd4', padding: '100px 0' }}>
+                        <div className="modern-spinner" style={{ borderColor: '#00bcd4 transparent #00bcd4 transparent', margin: '0 auto' }}></div>
+                        <h3 style={{ marginTop: '20px', letterSpacing: '2px' }}>ĐANG TẢI DỮ LIỆU...</h3>
+                    </div>
+                ) : (
+                    <div className="tab-content">
+                        {activeTab === 'movie' ? (
+                            <>
+                                {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc xem gần đây.", movieData.history, 'movie', '❤️')}
+                                {renderSection("Dành Cho Độ Tuổi Của Bạn", "Xu hướng điện ảnh được thế hệ của bạn quan tâm nhất.", movieData.age, 'movie', '🎓')}
+                                {renderSection("Thịnh Hành Cùng Giới Tính", "Những bộ phim đang làm mưa làm gió trong cộng đồng cùng giới tính với bạn.", movieData.gender, 'movie', '👫')}
+                                {renderSection("Có Thể Bạn Sẽ Thích", "Phân tích AI chuyên sâu (Collaborative Filtering) dựa trên những người dùng có chung gu.", movieData.personalized, 'movie', '🧠')}
+                                {renderSection("Khám Phá Sở Thích Mới", "Gợi ý thông minh dựa vào Thể loại và những từ khóa bạn từng tìm kiếm.", movieData.content_based, 'movie', '🎯')}
+                            </>
+                        ) : (
+                            <>
+                                {renderSection("Playlist Yêu Thích", "Những bài hát bạn nghe đi nghe lại hoặc đánh giá cao.", songData.history, 'song', '❤️')}
+                                {renderSection("Giai Điệu Thế Hệ", "Những bản nhạc mang đậm dấu ấn tuổi trẻ của thế hệ bạn.", songData.age, 'song', '🎧')}
+                                {renderSection("Giai Điệu Cùng Giới Tính", "Âm nhạc đang được phái của bạn ưu ái nhất.", songData.gender, 'song', '👫')}
+                                {renderSection("Khám Phá Gu Âm Nhạc Mới", "AI tự động học từ lượt view/like để tìm ra những bài hát hoàn hảo cho bạn.", songData.personalized, 'song', '🧠')}
+                                {renderSection("Mở Rộng Sở Thích", "Gợi ý thông minh dựa vào Thể loại và ca sĩ bạn từng tìm kiếm.", songData.content_based, 'song', '🎯')}
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* --- CSS --- */}
             <style dangerouslySetInnerHTML={{__html: `
-                @keyframes fadeUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
-                .animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
-                .animate-fade-up img { border-radius: 15px !important; box-shadow: 0 8px 25px rgba(0,0,0,0.6); }
+                .recommend-page-container { background: #0a0a0a; min-height: 100vh; color: white; padding-top: 80px; padding-bottom: 80px; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+                
+                /* HERO CHAT */
+                .hero-chat-section { position: relative; padding: 60px 20px; display: flex; justify-content: center; align-items: center; text-align: center; }
+                .glow-orb { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; max-width: 800px; height: 300px; background: linear-gradient(45deg, rgba(0,188,212,0.2), rgba(33,150,243,0.2)); filter: blur(100px); z-index: 1; pointer-events: none; border-radius: 50%; }
+                .hero-content { position: relative; z-index: 2; width: 100%; max-width: 900px; }
+                .ai-title { font-size: 3.5rem; font-weight: 900; margin-bottom: 15px; background: linear-gradient(to right, #00bcd4, #2196f3, #b2ebf2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; text-shadow: 0 0 30px rgba(0,188,212,0.3); }
+                .ai-subtitle { font-size: 1.1rem; color: #aaa; margin-bottom: 40px; line-height: 1.6; }
+
+                .chat-form { position: relative; display: flex; background: rgba(25, 25, 25, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 50px; padding: 10px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transition: 0.3s; }
+                .chat-form:focus-within { border-color: rgba(0,188,212,0.6); box-shadow: 0 0 30px rgba(0,188,212,0.2); transform: translateY(-2px); }
+                .loading-glow { animation: formGlow 2s infinite alternate; }
+                @keyframes formGlow { 0% { box-shadow: 0 0 20px rgba(0,188,212,0.2); } 100% { box-shadow: 0 0 40px rgba(33,150,243,0.6); border-color: #2196f3; } }
+                .chat-input { flex: 1; background: transparent; border: none; outline: none; color: white; font-size: 1.15rem; padding: 15px 25px; width: 100%; }
+                .chat-submit-btn { background: linear-gradient(45deg, #00bcd4, #2196f3); color: white; border: none; border-radius: 40px; padding: 0 35px; font-weight: 800; font-size: 1rem; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; min-width: 160px; }
+                .chat-submit-btn:hover:not(:disabled) { transform: scale(1.05); }
+                .chat-submit-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+                
+                .suggestion-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 30px; }
+                .chip-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 10px 20px; border-radius: 30px; cursor: pointer; transition: 0.3s; }
+                .chip-btn:hover { background: rgba(0,188,212,0.1); border-color: #00bcd4; color: white; transform: translateY(-3px); }
+
+                /* DIVIDERS */
+                .section-divider { display: flex; align-items: center; text-align: center; margin: 60px 5% 40px; }
+                .section-divider::before, .section-divider::after { content: ''; flex: 1; border-bottom: 1px dashed rgba(255,255,255,0.15); }
+                .divider-text { padding: 0 20px; font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
+
+                /* TABS */
+                .tab-container { display: flex; gap: 20px; justify-content: center; margin-bottom: 40px; }
+                .tab-btn { padding: 12px 40px; font-size: 1.2rem; font-weight: bold; border-radius: 30px; cursor: pointer; transition: all 0.3s; background: rgba(255,255,255,0.05); border: 1px solid #333; color: white; }
+                .active-movie { background: linear-gradient(45deg, #e50914, #b20710) !important; border: none; box-shadow: 0 5px 20px rgba(229, 9, 20, 0.5); }
+                .active-song { background: linear-gradient(45deg, #1db954, #128c3c) !important; border: none; box-shadow: 0 5px 20px rgba(29, 185, 84, 0.5); }
+
+                /* LAYOUT */
+                .ai-results-section, .default-recommend-section { padding: 0 5%; }
+                .recommend-category { margin-top: 60px; }
+                .category-title { font-size: 1.8rem; font-weight: bold; margin-bottom: 5px; }
+                .movie-title { color: #e50914; }
+                .song-title { color: #1db954; }
+                .category-desc { color: #888; margin-bottom: 30px; font-style: italic; font-size: 1rem; }
+                .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 25px; }
+
+                /* LOADERS */
+                .spinner { width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; }
                 .modern-spinner { width: 60px; height: 60px; border-radius: 50%; border: 4px solid; animation: spin 1s linear infinite; }
-                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                
+                .loading-state { text-align: center; padding: 60px 20px; background: rgba(0,188,212,0.05); border-radius: 20px; border: 1px solid rgba(0,188,212,0.2); }
+                .ai-brain-pulse { font-size: 5rem; animation: pulse 1.5s infinite alternate; margin-bottom: 20px; }
+                @keyframes pulse { 0% { transform: scale(1); filter: drop-shadow(0 0 10px #00bcd4); } 100% { transform: scale(1.15); filter: drop-shadow(0 0 30px #2196f3); } }
+
+                /* ANIMATIONS */
+                .animate-fade-down { animation: fadeDown 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                .animate-fade-up { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+                @keyframes fadeDown { 0% { opacity: 0; transform: translateY(-30px); } 100% { opacity: 1; transform: translateY(0); } }
+                @keyframes fadeUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
             `}} />
         </div>
     );
