@@ -32,9 +32,9 @@ const AdminDashboard = () => {
         year: '', rating: '', actor: '', director: ''
     });
 
-    // 🟢 BỘ LỌC NÂNG CAO MỚI CHO NHẠC
+    // 🟢 BỘ LỌC NÂNG CAO MỚI CHO NHẠC (Đồng bộ cấu trúc 4 ô như phim)
     const [musicFilters, setMusicFilters] = useState({
-        year: '', artist: ''
+        year: '', rating: '', artist: '', genre: ''
     });
 
     const PIE_COLORS = ['#00bcd4', '#e50914', '#ffc107', '#1db954'];
@@ -47,12 +47,15 @@ const AdminDashboard = () => {
     // 🟢 TẢI ĐỘC LẬP DỮ LIỆU KHI CHUYỂN TAB
     useEffect(() => {
         setSearchQuery(''); 
-        setSearchResults([]);
-        if (activeTab === 'movies' && topMovieItems.length === 0) { 
-            loadTrending('movie'); loadTopItems('movie'); 
+        setSearchResults([]); // Reset kết quả tìm kiếm để tránh lỗi chéo
+        
+        if (activeTab === 'movies') { 
+            loadTrending('movie'); 
+            if(topMovieItems.length === 0) loadTopItems('movie'); 
         } 
-        else if (activeTab === 'songs' && topSongItems.length === 0) { 
-            loadTrending('song'); loadTopItems('song'); 
+        else if (activeTab === 'songs') { 
+            loadTrending('song'); 
+            if(topSongItems.length === 0) loadTopItems('song'); 
         }
     }, [activeTab]);
 
@@ -132,21 +135,29 @@ const AdminDashboard = () => {
         } catch (e) {}
     };
 
-    // 🟢 SEARCH TỐI ƯU CẢ PHIM VÀ NHẠC
+    // 🟢 SEARCH TỐI ƯU CẢ PHIM VÀ NHẠC (CHỐNG LỖI BLACK SCREEN)
     const handleSearch = async () => {
         if (activeTab === 'songs') {
-            // Gom các bộ lọc lại thành 1 chuỗi truy vấn cho Youtube
             let query = searchQuery;
             if (musicFilters.artist) query += ` ${musicFilters.artist}`;
             if (musicFilters.year) query += ` ${musicFilters.year}`;
+            if (musicFilters.genre) query += ` ${musicFilters.genre}`;
             
             if(!query.trim()) return alert("Vui lòng nhập thông tin tìm kiếm nhạc!");
             
             try {
-                const res = await fetch(`http://localhost:5000/api/search?q=${encodeURIComponent(query)}`);
+                const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(query)}`);
                 const data = await res.json();
-                setSearchResults(data.songs || data || []);
-            } catch(e) {}
+
+                let safeArray = [];
+                if (Array.isArray(data)) safeArray = data;
+                else if (data && Array.isArray(data.songs)) safeArray = data.songs;
+                
+                setSearchResults(safeArray);
+            } catch(e) {
+                console.error("Search Nhạc Lỗi:", e);
+                setSearchResults([]);
+            }
             return;
         }
 
@@ -175,17 +186,23 @@ const AdminDashboard = () => {
             }
             const res = await fetch(tmdbUrl);
             const data = await res.json();
-            setSearchResults(data.results || []);
-        } catch(e) {}
+            // FIX LỖI ĐEN MÀN HÌNH CHO PHIM
+            setSearchResults(Array.isArray(data.results) ? data.results : []);
+        } catch(e) {
+            console.error("Search Phim Lỗi:", e);
+            setSearchResults([]);
+        }
     };
 
     const loadTrending = async (type) => {
-        const res = await fetch(`http://localhost:5000/api/admin/trending/${type}`);
-        if(res.ok) {
-            const data = await res.json();
-            if (type === 'movie') setTrendingMoviesList(data);
-            else setTrendingSongsList(data);
-        }
+        try {
+            const res = await fetch(`http://localhost:5000/api/admin/trending/${type}`);
+            if(res.ok) {
+                const data = await res.json();
+                if (type === 'movie') setTrendingMoviesList(Array.isArray(data) ? data : []);
+                else setTrendingSongsList(Array.isArray(data) ? data : []);
+            }
+        } catch (error) { console.error(error); }
     };
 
     const addToTrending = async (item) => {
@@ -194,7 +211,7 @@ const AdminDashboard = () => {
 
         let imageUrl = 'https://via.placeholder.com/200x300?text=No+Image';
         if (activeTab === 'movies' && item.poster_path) {
-            imageUrl = `https://image.tmdb.org/t/p/w200${item.poster_path}`;
+            imageUrl = `https://image.tmdb.org/t/p/w500${item.poster_path}`; 
         } else if (activeTab === 'songs') {
             imageUrl = item.thumbnails?.[0]?.url || item.thumbnail || item.image || `https://img.youtube.com/vi/${targetId}/hqdefault.jpg`;
         }
@@ -222,30 +239,35 @@ const AdminDashboard = () => {
         loadTrending(type);
     };
 
-    // 🟢 TẢI TOP ITEMS VÀ LƯU VÀO STATE RIÊNG BIỆT
+    // 🟢 TẢI TOP ITEMS ĐỘC LẬP VÀ AN TOÀN
     const loadTopItems = async (type) => {
-        const res = await fetch(`http://localhost:5000/api/admin/top-items/${type}`);
-        if(res.ok) {
-            const rawData = await res.json();
-            const dataWithNames = await Promise.all(rawData.map(async (item) => {
-                let name = "Đang tải...";
-                try {
-                    if(type === 'movie') {
-                        const mRes = await fetch(`${BASE_URL}/movie/${item.ItemID}?api_key=${API_KEY}&language=vi-VN`);
-                        const mData = await mRes.json();
-                        name = mData.title || item.ItemID;
-                    } else {
-                        const sRes = await fetchSongDetailAI(item.ItemID);
-                        name = sRes?.info?.videoDetails?.title || item.ItemID;
-                    }
-                } catch(e) { name = item.ItemID; }
-                return { ...item, ItemName: name };
-            }));
-            
-            // Gán dữ liệu vào đúng state của nó
-            if (type === 'movie') setTopMovieItems(dataWithNames);
-            else setTopSongItems(dataWithNames);
-        }
+        try {
+            const res = await fetch(`http://localhost:5000/api/admin/top-items/${type}`);
+            if(res.ok) {
+                const rawData = await res.json();
+                if (!Array.isArray(rawData)) return;
+
+                const dataWithNames = await Promise.all(rawData.slice(0, 20).map(async (item) => {
+                    let name = "Đang tải...";
+                    try {
+                        if(type === 'movie') {
+                            const mRes = await fetch(`${BASE_URL}/movie/${item.ItemID}?api_key=${API_KEY}&language=vi-VN`);
+                            if(mRes.ok) {
+                                const mData = await mRes.json();
+                                name = mData.title || item.ItemID;
+                            }
+                        } else {
+                            const sRes = await fetchSongDetailAI(item.ItemID);
+                            name = sRes?.info?.videoDetails?.title || item.ItemID;
+                        }
+                    } catch(e) { name = item.ItemID; }
+                    return { ...item, ItemName: name };
+                }));
+                
+                if (type === 'movie') setTopMovieItems(dataWithNames);
+                else setTopSongItems(dataWithNames);
+            }
+        } catch(err) { console.error("Lỗi lấy Top Items:", err); }
     };
 
     if (loading) return <div className="loading-screen"><div className="modern-spinner"></div></div>;
@@ -370,7 +392,6 @@ const AdminDashboard = () => {
             const isMovie = activeTab === 'movies';
             const color = isMovie ? '#e50914' : '#1db954';
             
-            // Lấy đúng dữ liệu của tab hiện tại để render
             const currentTrendingList = isMovie ? trendingMoviesList : trendingSongsList;
             const currentTopItems = isMovie ? topMovieItems : topSongItems;
 
@@ -387,21 +408,20 @@ const AdminDashboard = () => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                                 <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder={`Nhập Tên ${isMovie ? 'phim' : 'bài hát'}...`} className="modern-input" style={{marginBottom: 0}} />
                                 
-                                {/* BỘ LỌC CHO PHIM */}
-                                {isMovie && (
+                                {/* 🟢 ĐÃ ĐỒNG BỘ: BỘ LỌC PHIM VÀ NHẠC CÓ CẤU TRÚC 4 Ô GIỐNG NHAU */}
+                                {isMovie ? (
                                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                         <input type="number" placeholder="Năm phát hành" className="modern-input" style={{flex: 1, minWidth: '80px', padding: '8px'}} value={advancedFilters.year} onChange={e => setAdvancedFilters({...advancedFilters, year: e.target.value})} />
                                         <input type="number" placeholder="Điểm (> VD: 7.5)" step="0.1" className="modern-input" style={{flex: 1, minWidth: '80px', padding: '8px'}} value={advancedFilters.rating} onChange={e => setAdvancedFilters({...advancedFilters, rating: e.target.value})} />
                                         <input type="text" placeholder="Diễn viên (VD: Tom Cruise)" className="modern-input" style={{flex: 2, minWidth: '120px', padding: '8px'}} value={advancedFilters.actor} onChange={e => setAdvancedFilters({...advancedFilters, actor: e.target.value})} />
                                         <input type="text" placeholder="Đạo diễn" className="modern-input" style={{flex: 2, minWidth: '120px', padding: '8px'}} value={advancedFilters.director} onChange={e => setAdvancedFilters({...advancedFilters, director: e.target.value})} />
                                     </div>
-                                )}
-                                
-                                {/* BỘ LỌC CHO NHẠC */}
-                                {!isMovie && (
+                                ) : (
                                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                        <input type="number" placeholder="Năm phát hành" className="modern-input" style={{flex: 1, minWidth: '100px', padding: '8px'}} value={musicFilters.year} onChange={e => setMusicFilters({...musicFilters, year: e.target.value})} />
-                                        <input type="text" placeholder="Tên Ca sĩ / Nhạc sĩ" className="modern-input" style={{flex: 2, minWidth: '150px', padding: '8px'}} value={musicFilters.artist} onChange={e => setMusicFilters({...musicFilters, artist: e.target.value})} />
+                                        <input type="number" placeholder="Năm phát hành" className="modern-input" style={{flex: 1, minWidth: '80px', padding: '8px'}} value={musicFilters.year} onChange={e => setMusicFilters({...musicFilters, year: e.target.value})} />
+                                        <input type="number" placeholder="Điểm (> VD: 7.5)" disabled className="modern-input" style={{flex: 1, minWidth: '80px', padding: '8px', opacity: 0.5, cursor: 'not-allowed'}} title="YouTube không hỗ trợ lọc theo điểm" />
+                                        <input type="text" placeholder="Tên Ca sĩ" className="modern-input" style={{flex: 2, minWidth: '120px', padding: '8px'}} value={musicFilters.artist} onChange={e => setMusicFilters({...musicFilters, artist: e.target.value})} />
+                                        <input type="text" placeholder="Thể loại / Nhạc sĩ" className="modern-input" style={{flex: 2, minWidth: '120px', padding: '8px'}} value={musicFilters.genre} onChange={e => setMusicFilters({...musicFilters, genre: e.target.value})} />
                                     </div>
                                 )}
 
@@ -411,7 +431,7 @@ const AdminDashboard = () => {
                             <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
                                 {searchResults.map((item, idx) => (
                                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderBottom: '1px solid #333' }}>
-                                        <img src={isMovie ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : (item.thumbnails?.[0]?.url || item.thumbnail)} alt="" style={{width: 40, height: 40, borderRadius: 5, objectFit: 'cover'}}/>
+                                        <img src={isMovie ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : (item.thumbnails?.[0]?.url || item.thumbnail || `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`)} alt="" style={{width: 40, height: 40, borderRadius: 5, objectFit: 'cover'}}/>
                                         <div style={{ flex: 1, overflow: 'hidden' }}>
                                             <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.Title || item.title || item.name}</div>
                                         </div>
@@ -454,9 +474,7 @@ const AdminDashboard = () => {
                                 {currentTopItems.map((item, idx) => (
                                     <tr key={idx} className="table-row">
                                         <td style={{ padding: '15px 10px', fontSize: '1.5rem', fontWeight: '900', color: idx < 3 ? color : '#666' }}>#{idx+1}</td>
-                                        <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'white' }}>
-                                            {item.ItemName}
-                                        </td>
+                                        <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'white' }}>{item.ItemName}</td>
                                         <td style={{ padding: '15px 10px', color: '#888', fontStyle: 'italic', fontSize: '0.85rem' }}>
                                             <a href={`/${isMovie ? 'movie' : 'song'}/${item.ItemID}`} target="_blank" style={{color: '#00bcd4', textDecoration: 'none'}}>{item.ItemID}</a>
                                         </td>
@@ -465,7 +483,7 @@ const AdminDashboard = () => {
                                         <td style={{ padding: '15px 10px', textAlign: 'center', color: '#ffc107', fontWeight: 'bold' }}>{item.AvgRating ? item.AvgRating.toFixed(1) : '0.0'} ⭐</td>
                                     </tr>
                                 ))}
-                                {currentTopItems.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'20px'}}>Đang tải dữ liệu tương tác hoặc chưa có dữ liệu...</td></tr>}
+                                {currentTopItems.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'20px'}}>Đang tải dữ liệu tương tác hoặc chưa có...</td></tr>}
                             </tbody>
                         </table>
                     </div>

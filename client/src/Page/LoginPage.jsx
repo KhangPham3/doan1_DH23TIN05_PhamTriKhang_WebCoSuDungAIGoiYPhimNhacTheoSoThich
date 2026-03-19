@@ -66,9 +66,7 @@ const LoginPage = () => {
         setLoading(false);
     };
 
-    // ==========================================
-    // 🟢 XỬ LÝ ĐĂNG NHẬP GOOGLE
-    // ==========================================
+    // XỬ LÝ ĐĂNG NHẬP GOOGLE
     const loginGoogle = useGoogleLogin({
         onSuccess: async (tokenResponse) => {
             try {
@@ -94,9 +92,7 @@ const LoginPage = () => {
         }
     });
 
-    // ==========================================
-    // 🟢 XỬ LÝ ĐĂNG NHẬP FACEBOOK
-    // ==========================================
+    //  XỬ LÝ ĐĂNG NHẬP FACEBOOK
     const responseFacebook = async (response) => {
         if (response.accessToken) {
             try {

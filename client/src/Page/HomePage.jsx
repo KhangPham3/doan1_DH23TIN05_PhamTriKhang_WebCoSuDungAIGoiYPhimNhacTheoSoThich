@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import HeroSection from '../Components/HeroSection';
-import Card from '../Components/UI/Card';
 import { API_KEY, BASE_URL, IMAGE_URL } from '../API/tmdbAPI';
 import { fetchSongDetailAI, fetchMusicCharts } from '../API/MusicAPI';
 
@@ -10,12 +9,10 @@ const HomePage = () => {
     const [trendingMovies, setTrendingMovies] = useState([]);
     const [trendingSongs, setTrendingSongs] = useState([]);
     
-    // 🟢 TÁCH THÀNH 2 STATE RIÊNG BIỆT CHO ADMIN PICKS
     const [adminPicksMovies, setAdminPicksMovies] = useState([]);
     const [adminPicksSongs, setAdminPicksSongs] = useState([]);
     
     const [loading, setLoading] = useState(true);
-    
     const user = JSON.parse(localStorage.getItem('currentUser'));
 
     useEffect(() => {
@@ -40,7 +37,7 @@ const HomePage = () => {
                     setTrendingSongs(formattedTrendSongs);
                 }
 
-                // 🟢 LẤY ADMIN PICKS VÀ ĐƯA VÀO ĐÚNG STATE TƯƠNG ỨNG
+                //  LẤY ADMIN PICKS VÀ ĐƯA VÀO ĐÚNG STATE
                 try {
                     const [adminMoviesRes, adminSongsRes] = await Promise.all([
                         fetch('http://localhost:5000/api/admin/trending/movie'),
@@ -89,7 +86,7 @@ const HomePage = () => {
     }, []);
 
     return (
-        <div style={{ background: '#121212', minHeight: '100vh', paddingBottom: '50px' }}>
+        <div style={{ background: '#121212', minHeight: '100vh', paddingBottom: '50px', overflowX: 'hidden' }}>
             <HeroSection />
 
             <div style={{ marginTop: '-30px', position: 'relative', zIndex: 10, paddingLeft: '40px', paddingRight: '40px' }}>
@@ -104,10 +101,8 @@ const HomePage = () => {
                             <h2 style={{ color: '#ffc107', textAlign: 'left', marginBottom: '30px', textShadow: '0 2px 10px rgba(255,193,7,0.3)', fontSize: '2rem' }}>
                                 🔥 BẢNG XẾP HẠNG TOP 10 HÔM NAY
                             </h2>
-                            
                             <div className="trending-grid">
-                                
-                                {/* CỘT PHIM (TRÁI) */}
+                                {/* CỘT PHIM */}
                                 <div className="trending-column">
                                     <h3 className="trending-header movie-header">Top 10 Phim</h3>
                                     <div className="trending-list">
@@ -126,7 +121,7 @@ const HomePage = () => {
                                     </div>
                                 </div>
 
-                                {/* CỘT NHẠC (PHẢI) */}
+                                {/* CỘT NHẠC */}
                                 <div className="trending-column">
                                     <h3 className="trending-header song-header">Top 10 Bài Hát</h3>
                                     <div className="trending-list">
@@ -148,19 +143,19 @@ const HomePage = () => {
                                         )})}
                                     </div>
                                 </div>
-                                
                             </div>
                         </div>
 
-                        {/* ================= 🟢 HÀNG 2: ADMIN PICKS PHIM ================= */}
+                        {/* =================  HÀNG 2: ADMIN PICKS PHIM ================= */}
                         {adminPicksMovies.length > 0 && (
                             <div style={{ marginTop: '70px', marginBottom: '40px' }}>
                                 <h2 style={{ color: '#e50914', textAlign: 'left', marginBottom: '20px', textShadow: '0 2px 10px rgba(229,9,20,0.3)', fontSize: '2rem' }}>
                                     🎬 PHIM DO ADMIN TUYỂN CHỌN
                                 </h2>
                                 <div className="admin-picks-container">
-                                    <div className="admin-picks-track">
-                                        {adminPicksMovies.map((item, idx) => (
+                                    <div className="admin-picks-track movie-track">
+                                        {/* Gấp đôi danh sách để tạo hiệu ứng Infinite Scroll (Trượt vô tận) */}
+                                        {[...adminPicksMovies, ...adminPicksMovies].map((item, idx) => (
                                             <a href={`/movie/${item.ItemID}`} key={idx} className="admin-pick-card movie-pick-card">
                                                 <div className="admin-pick-img-wrapper">
                                                     <img src={item.ItemImage} alt={item.ItemTitle} className="admin-pick-img" loading="lazy" />
@@ -173,15 +168,15 @@ const HomePage = () => {
                             </div>
                         )}
 
-                        {/* ================= 🟢 HÀNG 3: ADMIN PICKS NHẠC ================= */}
+                        {/* =================  HÀNG 3: ADMIN PICKS NHẠC ================= */}
                         {adminPicksSongs.length > 0 && (
                             <div style={{ marginTop: '50px', marginBottom: '40px' }}>
                                 <h2 style={{ color: '#1db954', textAlign: 'left', marginBottom: '20px', textShadow: '0 2px 10px rgba(29,185,84,0.3)', fontSize: '2rem' }}>
                                     🎵 NHẠC DO ADMIN TUYỂN CHỌN
                                 </h2>
                                 <div className="admin-picks-container">
-                                    <div className="admin-picks-track">
-                                        {adminPicksSongs.map((item, idx) => (
+                                    <div className="admin-picks-track song-track">
+                                        {[...adminPicksSongs, ...adminPicksSongs].map((item, idx) => (
                                             <a href={`/song/${item.ItemID}`} key={idx} className="admin-pick-card song-pick-card">
                                                 <div className="admin-pick-img-wrapper">
                                                     <img src={item.ItemImage} alt={item.ItemTitle} className="admin-pick-img" loading="lazy" />
@@ -194,9 +189,9 @@ const HomePage = () => {
                             </div>
                         )}
 
-                        {/* --- CSS CHO TOÀN BỘ HIỆU ỨNG VÀ BỐ CỤC --- */}
+                        {/* --- CSS --- */}
                         <style dangerouslySetInnerHTML={{__html: `
-                            /* BỐ CỤC CHIA ĐÔI 50/50 */
+                            /* CSS TOP 10 TRENDING (CŨ) GIỮ NGUYÊN */
                             .trending-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
                             @media (max-width: 1000px) { .trending-grid { grid-template-columns: 1fr; } }
                             .trending-column { display: flex; flex-direction: column; }
@@ -205,7 +200,6 @@ const HomePage = () => {
                             .song-header { color: #1db954; border-bottom: 3px solid #1db954; }
                             .trending-list { display: flex; flex-direction: column; gap: 15px; }
 
-                            /* THẺ CARD CHÍNH */
                             .trending-card {
                                 display: flex; align-items: center; background: rgba(255,255,255,0.03); padding: 10px;
                                 border-radius: 15px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);
@@ -247,15 +241,54 @@ const HomePage = () => {
                             .animate-fade-right { animation: fadeRight 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; }
                             .animate-fade-left { animation: fadeLeft 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; }
 
-                            /* 🟢 CSS KHỐI ADMIN PICKS TÁCH BIỆT */
-                            .admin-picks-container { width: 100%; overflow-x: auto; padding: 20px 0; scrollbar-width: none; -ms-overflow-style: none; }
+                            
+     
+                            .admin-picks-container { 
+                                width: 100%; overflow: hidden; padding: 20px 0; 
+                                scrollbar-width: none; -ms-overflow-style: none;
+                            }
                             .admin-picks-container::-webkit-scrollbar { display: none; }
-                            .admin-picks-track { display: flex; gap: 25px; width: max-content; }
+                            
+                            /* Các thuộc tính chung của thanh trượt */
+                            .admin-picks-track { 
+                                display: flex; gap: 25px; width: max-content; 
+                                animation-timing-function: linear;
+                                animation-iteration-count: infinite;
+                            }
+
+                            .movie-track { 
+                                animation-name: marqueeLeft;
+                                animation-duration: 40s; 
+                            }
+
+                            .song-track { 
+                                animation-name: marqueeRight;
+                                animation-duration: 40s; /* Đã đồng bộ tốc độ như phim */
+                            }
+
+                            
+                            .admin-picks-container:hover .admin-picks-track {
+                                animation-play-state: paused;
+                            }
+
+                            /* Animation chạy sang TRÁI */
+                            @keyframes marqueeLeft { 
+                                0% { transform: translateX(0); } 
+                                100% { transform: translateX(calc(-50% - 12.5px)); } 
+                            }
+
+                            /* Animation chạy sang PHẢI */
+                            @keyframes marqueeRight { 
+                                0% { transform: translateX(calc(-50% - 12.5px)); } /* Bắt đầu từ vị trí đã trượt */
+                                100% { transform: translateX(0); } /* Trượt về 0 */
+                            }
+
                             .admin-pick-card {
                                 width: 220px; position: relative; text-decoration: none; display: flex; flex-direction: column;
                                 border-radius: 12px; background: rgba(255,255,255,0.02); padding: 10px;
                                 transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
                             }
+                    
                             .movie-pick-card:hover { transform: translateY(-15px); background: rgba(229, 9, 20, 0.1); box-shadow: 0 15px 30px rgba(229, 9, 20, 0.2); }
                             .song-pick-card:hover { transform: translateY(-15px); background: rgba(29, 185, 84, 0.1); box-shadow: 0 15px 30px rgba(29, 185, 84, 0.2); }
 

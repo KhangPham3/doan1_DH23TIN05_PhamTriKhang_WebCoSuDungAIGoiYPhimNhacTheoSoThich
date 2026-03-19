@@ -266,7 +266,6 @@ function Navigation() {
                     )}
                 </div>
             
-                {/* 🟢 KHU VỰC TÀI KHOẢN ĐÃ ĐƯỢC FIX LỖI */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}>
                     {user ? (
                         <Link to="/profile" className="user-profile-btn">

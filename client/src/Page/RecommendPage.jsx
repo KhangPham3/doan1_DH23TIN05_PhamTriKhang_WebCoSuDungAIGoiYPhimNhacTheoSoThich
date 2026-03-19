@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { searchMovies, IMAGE_URL } from '../API/tmdbAPI';
-import { searchMusic } from '../API/MusicAPI';
+import { searchMovies, IMAGE_URL, BASE_URL, API_KEY } from '../API/tmdbAPI';
+import { searchMusic, fetchSongDetailAI } from '../API/MusicAPI';
 import Card from '../Components/UI/Card';
 
 const RecommendPage = () => {
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    // 🟢 Tối ưu đồng bộ lấy ID chuẩn xác nhất
+    const userId = currentUser?.id || currentUser?.UserID || 0;
     
     // --- STATE CHO CHAT GEMINI ---
     const [prompt, setPrompt] = useState('');
@@ -18,35 +20,36 @@ const RecommendPage = () => {
     const [songData, setSongData] = useState({ history: [], popular: [], age: [], gender: [], content_based: [], personalized: [] });
 
     const suggestedPrompts = [
-        "Tôi đang rất buồn, cần phim và nhạc chữa lành ",
-        "Gợi ý list nhạc cực căng để tập Gym ",
-        "Những bộ phim có cú twist 'hack não' nhất ",
-        "Nhạc chill nhẹ nhàng để làm việc vào ban đêm "
+        "Tôi đang rất buồn, cần phim và nhạc chữa lành 🌧️",
+        "Gợi ý list nhạc cực căng để tập Gym 💪",
+        "Những bộ phim có cú twist 'hack não' nhất 🤯",
+        "Nhạc chill nhẹ nhàng để làm việc vào ban đêm ☕"
     ];
 
     // ==========================================
     // 1. LẤY GỢI Ý MẶC ĐỊNH THEO TỪNG HẠNG MỤC
     // ==========================================
     useEffect(() => {
-        if (!currentUser || !currentUser.id) return;
+        if (!userId) return;
 
         const loadDefaultData = async () => {
             setLoadingDefault(true);
             try {
-                // Gọi API Phân tích sâu (Tuổi, Giới tính, Lịch sử...)
+                // 🟢 ĐÃ FIX LỖI PORT 5000 -> 8000 VÀ BỔ SUNG CƠ CHẾ CHỐNG CRASH
                 const [mRes, sRes] = await Promise.all([
-                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${currentUser.id}&type=movie`),
-                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${currentUser.id}&type=song`)
+                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${userId}&type=movie`).catch(() => null),
+                    fetch(`http://localhost:8000/api/recommend/dashboard?userId=${userId}&type=song`).catch(() => null)
                 ]);
-                const mIds = await mRes.json();
-                const sIds = await sRes.json();
+                
+                const mIds = mRes && mRes.ok ? await mRes.json() : {};
+                const sIds = sRes && sRes.ok ? await sRes.json() : {};
 
                 // Hàm fetch Phim từ TMDB (An toàn, bỏ qua lỗi)
                 const fetchMovies = async (ids) => {
-                    if (!ids || ids.length === 0) return [];
-                    const safeIds = ids.slice(0, 10); // Lấy tối đa 10 cái cho mỗi mục
+                    if (!ids || !Array.isArray(ids) || ids.length === 0) return [];
+                    const safeIds = ids.slice(0, 10); 
                     const p = safeIds.map(id => 
-                        fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=46f87255f304cb323c76a53abf325782&language=vi-VN`)
+                        fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN`)
                         .then(r => r.json())
                         .catch(() => null)
                     );
@@ -58,12 +61,20 @@ const RecommendPage = () => {
                     }));
                 };
 
-                // Hàm fetch Nhạc từ Youtube (Giả lập nhanh dữ liệu để UI không bị đơ)
-                const formatSongs = (ids) => {
-                    if (!ids || ids.length === 0) return [];
-                    return ids.slice(0, 10).map(id => ({
-                        id: id, type: 'song', title: 'Đang tải...', 
-                        image: `https://img.youtube.com/vi/${id}/hqdefault.jpg`, subtitle: 'Gợi ý AI'
+                // Hàm fetch Nhạc từ Youtube API
+                const fetchSongs = async (ids) => {
+                    if (!ids || !Array.isArray(ids) || ids.length === 0) return [];
+                    const safeIds = ids.slice(0, 10);
+                    const p = safeIds.map(id => 
+                        fetchSongDetailAI(id).catch(() => null)
+                    );
+                    const res = await Promise.all(p);
+                    return res.filter(s => s && s.info).map(s => ({
+                        id: s.info.videoDetails.videoId, type: 'song',
+                        title: s.info.videoDetails.title,
+                        artist: s.info.videoDetails.author,
+                        image: `https://img.youtube.com/vi/${s.info.videoDetails.videoId}/hqdefault.jpg`,
+                        subtitle: s.info.videoDetails.author
                     }));
                 };
 
@@ -77,22 +88,22 @@ const RecommendPage = () => {
                 });
 
                 setSongData({
-                    history: formatSongs(sIds.history),
-                    popular: formatSongs(sIds.popular),
-                    age: formatSongs(sIds.age),
-                    gender: formatSongs(sIds.gender),
-                    content_based: formatSongs(sIds.content_based), 
-                    personalized: formatSongs(sIds.personalized)
+                    history: await fetchSongs(sIds.history),
+                    popular: await fetchSongs(sIds.popular),
+                    age: await fetchSongs(sIds.age),
+                    gender: await fetchSongs(sIds.gender),
+                    content_based: await fetchSongs(sIds.content_based), 
+                    personalized: await fetchSongs(sIds.personalized)
                 });
 
             } catch (error) { console.error("Lỗi tải AI mặc định:", error); }
             setLoadingDefault(false);
         };
         loadDefaultData();
-    }, [currentUser?.id]);
+    }, [userId]);
 
     // ==========================================
-    // 2. XỬ LÝ CHAT VỚI GEMINI
+    // 2. XỬ LÝ CHAT VỚI GEMINI (ĐÃ FIX LỖI TÌM KIẾM ĐỂ NÓ HOẠT ĐỘNG MƯỢT MÀ)
     // ==========================================
     const handleAskGemini = async (textPrompt) => {
         const finalPrompt = textPrompt || prompt;
@@ -111,23 +122,29 @@ const RecommendPage = () => {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json' 
                 },
-                body: JSON.stringify({ prompt: finalPrompt, userId: user?.id || 0 })
+                body: JSON.stringify({ prompt: finalPrompt, userId: userId })
             });
+            
             const aiData = await aiRes.json();
 
             if (aiData.success && aiData.data) {
                 const movieNames = aiData.data.movies || [];
                 const songNames = aiData.data.songs || [];
 
-                // Hàm an toàn chống sập API
+                // Hàm an toàn gọi API ngoài
                 const safeSearchMovie = async (name) => {
-                    try { const res = await searchMovies(name); return (res && res.length > 0) ? res[0] : null; } 
-                    catch (e) { return null; }
+                    try { 
+                        const res = await searchMovies(name); 
+                        return (res && res.length > 0) ? res[0] : null; 
+                    } catch (e) { return null; }
                 };
 
                 const safeSearchMusic = async (name) => {
-                    try { const res = await searchMusic(name); return (res && res.length > 0) ? res[0] : null; } 
-                    catch (e) { return null; }
+                    try { 
+                        const res = await searchMusic(name); 
+                        let safeRes = Array.isArray(res) ? res : (res.songs || []);
+                        return (safeRes && safeRes.length > 0) ? safeRes[0] : null; 
+                    } catch (e) { return null; }
                 };
 
                 const fetchedMovies = await Promise.all(movieNames.map(name => safeSearchMovie(name)));
@@ -135,26 +152,38 @@ const RecommendPage = () => {
 
                 const validMovies = fetchedMovies.filter(m => m && m.id).map(m => ({
                     id: m.id, type: 'movie', title: m.title, 
-                    image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : '[https://via.placeholder.com/300x450?text=No+Image](https://via.placeholder.com/300x450?text=No+Image)', 
-                    subtitle: m.release_date?.substring(0, 4) || 'N/A'
+                    image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Image', 
+                    subtitle: m.release_date?.substring(0, 4)
                 }));
 
-                const validSongs = fetchedSongs.filter(s => s && s.videoId).map(s => ({
-                    id: s.videoId, type: 'song', title: s.title, 
-                    image: s.thumbnails && s.thumbnails.length > 0 ? s.thumbnails[0].url : '[https://via.placeholder.com/300x300?text=No+Image](https://via.placeholder.com/300x300?text=No+Image)', 
-                    subtitle: s.artists && s.artists.length > 0 ? s.artists[0].name : 'YouTube'
-                }));
+                const validSongs = fetchedSongs
+                    .filter(s => s && s.videoId) 
+                    .map(s => {
+                        let imageUrl = `https://img.youtube.com/vi/${s.videoId}/hqdefault.jpg`;
+                        if (s.thumbnails && s.thumbnails.length > 0) {
+                            imageUrl = s.thumbnails[s.thumbnails.length - 1].url;
+                        }
+                        let artistName = 'YouTube';
+                        if (s.artists && s.artists.length > 0 && s.artists[0].name) {
+                            artistName = s.artists[0].name;
+                        }
+                        return {
+                            id: s.videoId, type: 'song', title: s.title, 
+                            image: imageUrl, subtitle: artistName
+                        };
+                    });
 
                 setAiResults({ movies: validMovies, songs: validSongs });
             } else {
-                alert("Lỗi AI: " + (aiData.message || ""));
+                alert("AI không thể xử lý yêu cầu lúc này: " + (aiData.message || "Hãy thử lại!"));
             }
         } catch (error) {
-            console.error("Lỗi Frontend:", error);
-            alert("Lỗi kết nối máy chủ AI. Vui lòng kiểm tra lại Python Server!");
+            console.error("Lỗi Gemini Client:", error);
+            alert("Lỗi kết nối đến máy chủ Trợ lý ảo AI.");
         }
         setLoadingGemini(false);
     };
+
     // ==========================================
     // 3. HÀM RENDER CÁC MỤC (SECTION)
     // ==========================================
@@ -241,7 +270,6 @@ const RecommendPage = () => {
                     <span className="divider-text">Phân Tích Chuyên Sâu Hôm Nay 🌟</span>
                 </div>
 
-                {/* TAB CHUYỂN ĐỔI */}
                 <div className="tab-container">
                     <button onClick={() => setActiveTab('movie')} className={`tab-btn ${activeTab === 'movie' ? 'active-movie' : ''}`}>🎬 ĐIỆN ẢNH</button>
                     <button onClick={() => setActiveTab('song')} className={`tab-btn ${activeTab === 'song' ? 'active-song' : ''}`}>🎵 ÂM NHẠC</button>
@@ -256,7 +284,7 @@ const RecommendPage = () => {
                     <div className="tab-content">
                         {activeTab === 'movie' ? (
                             <>
-                                {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc xem gần đây.", movieData.history, 'movie', '❤️')}
+                                {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc đánh giá cao.", movieData.history, 'movie', '❤️')}
                                 {renderSection("Dành Cho Độ Tuổi Của Bạn", "Xu hướng điện ảnh được thế hệ của bạn quan tâm nhất.", movieData.age, 'movie', '🎓')}
                                 {renderSection("Thịnh Hành Cùng Giới Tính", "Những bộ phim đang làm mưa làm gió trong cộng đồng cùng giới tính với bạn.", movieData.gender, 'movie', '👫')}
                                 {renderSection("Có Thể Bạn Sẽ Thích", "Phân tích AI chuyên sâu (Collaborative Filtering) dựa trên những người dùng có chung gu.", movieData.personalized, 'movie', '🧠')}
@@ -275,11 +303,9 @@ const RecommendPage = () => {
                 )}
             </div>
 
-            {/* --- CSS --- */}
             <style dangerouslySetInnerHTML={{__html: `
                 .recommend-page-container { background: #0a0a0a; min-height: 100vh; color: white; padding-top: 80px; padding-bottom: 80px; font-family: 'Inter', sans-serif; overflow-x: hidden; }
                 
-                /* HERO CHAT */
                 .hero-chat-section { position: relative; padding: 60px 20px; display: flex; justify-content: center; align-items: center; text-align: center; }
                 .glow-orb { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; max-width: 800px; height: 300px; background: linear-gradient(45deg, rgba(0,188,212,0.2), rgba(33,150,243,0.2)); filter: blur(100px); z-index: 1; pointer-events: none; border-radius: 50%; }
                 .hero-content { position: relative; z-index: 2; width: 100%; max-width: 900px; }
@@ -299,18 +325,15 @@ const RecommendPage = () => {
                 .chip-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #ccc; padding: 10px 20px; border-radius: 30px; cursor: pointer; transition: 0.3s; }
                 .chip-btn:hover { background: rgba(0,188,212,0.1); border-color: #00bcd4; color: white; transform: translateY(-3px); }
 
-                /* DIVIDERS */
                 .section-divider { display: flex; align-items: center; text-align: center; margin: 60px 5% 40px; }
                 .section-divider::before, .section-divider::after { content: ''; flex: 1; border-bottom: 1px dashed rgba(255,255,255,0.15); }
                 .divider-text { padding: 0 20px; font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
 
-                /* TABS */
                 .tab-container { display: flex; gap: 20px; justify-content: center; margin-bottom: 40px; }
                 .tab-btn { padding: 12px 40px; font-size: 1.2rem; font-weight: bold; border-radius: 30px; cursor: pointer; transition: all 0.3s; background: rgba(255,255,255,0.05); border: 1px solid #333; color: white; }
                 .active-movie { background: linear-gradient(45deg, #e50914, #b20710) !important; border: none; box-shadow: 0 5px 20px rgba(229, 9, 20, 0.5); }
                 .active-song { background: linear-gradient(45deg, #1db954, #128c3c) !important; border: none; box-shadow: 0 5px 20px rgba(29, 185, 84, 0.5); }
 
-                /* LAYOUT */
                 .ai-results-section, .default-recommend-section { padding: 0 5%; }
                 .recommend-category { margin-top: 60px; }
                 .category-title { font-size: 1.8rem; font-weight: bold; margin-bottom: 5px; }
@@ -319,7 +342,6 @@ const RecommendPage = () => {
                 .category-desc { color: #888; margin-bottom: 30px; font-style: italic; font-size: 1rem; }
                 .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 25px; }
 
-                /* LOADERS */
                 .spinner { width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; }
                 .modern-spinner { width: 60px; height: 60px; border-radius: 50%; border: 4px solid; animation: spin 1s linear infinite; }
                 @keyframes spin { to { transform: rotate(360deg); } }
@@ -328,11 +350,12 @@ const RecommendPage = () => {
                 .ai-brain-pulse { font-size: 5rem; animation: pulse 1.5s infinite alternate; margin-bottom: 20px; }
                 @keyframes pulse { 0% { transform: scale(1); filter: drop-shadow(0 0 10px #00bcd4); } 100% { transform: scale(1.15); filter: drop-shadow(0 0 30px #2196f3); } }
 
-                /* ANIMATIONS */
                 .animate-fade-down { animation: fadeDown 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 .animate-fade-up { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
                 @keyframes fadeDown { 0% { opacity: 0; transform: translateY(-30px); } 100% { opacity: 1; transform: translateY(0); } }
                 @keyframes fadeUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
+                .shine-effect::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%); transform: skewX(-25deg); transition: 0.7s; z-index: 1; }
+                .shine-effect:hover::before { left: 200%; }
             `}} />
         </div>
     );

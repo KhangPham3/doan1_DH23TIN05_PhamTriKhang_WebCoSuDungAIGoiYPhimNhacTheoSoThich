@@ -60,13 +60,12 @@ export const discoverMovies = async (filters = {}, pagesToFetch = 3) => {
         if (releaseYear) baseUrl += `&primary_release_year=${releaseYear}`;
         if (region) baseUrl += `&region=${region}`;
 
-        // 🟢 NÂNG CẤP: Nếu người dùng chọn "Mới nhất", chặn các phim chưa ra mắt
+       
         if (sortBy === 'primary_release_date.desc') {
-            const today = new Date().toISOString().split('T')[0]; // Lấy ngày hôm nay (VD: 2026-03-09)
-            baseUrl += `&primary_release_date.lte=${today}`; // lte: Less than or equal to (Nhỏ hơn hoặc bằng)
+            const today = new Date().toISOString().split('T')[0]; 
+            baseUrl += `&primary_release_date.lte=${today}`; 
         }
 
-        // 🟢 NÂNG CẤP: Lấy nhiều trang (VD: 3 trang = 60 phim) cùng lúc thay vì chỉ 20 phim
         const requests = [];
         for (let i = 1; i <= pagesToFetch; i++) {
             requests.push(fetch(`${baseUrl}&page=${i}`).then(res => res.json()));

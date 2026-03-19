@@ -57,9 +57,9 @@ def get_charts():
     except: return jsonify([])
 
 
-# ==========================================
-# CORE AI: ĐÃ TỐI ƯU HÓA HIỆU SUẤT VÀ CACHE
-# ==========================================
+
+# CORE AI
+
 @cached(cache=ai_cache) 
 def generate_recommendations(user_id, item_type):
     try:
@@ -93,7 +93,6 @@ def generate_recommendations(user_id, item_type):
         
         action_df = df[~df['ActionType'].isin(['SEARCH', 'PREFER_MOVIE', 'PREFER_SONG'])]
 
-        # MỚI: LẤY DANH SÁCH TUYỆT ĐỐI CÁC TÁC PHẨM ĐÃ BỊ DISLIKE
         disliked_items = set(action_df[(action_df['UserID'] == user_id) & (action_df['ActionType'] == 'DISLIKE')]['ItemID'].dropna().unique().tolist())
 
         user_actions = action_df[(action_df['UserID'] == user_id) & (action_df['Rating'] >= 3)]
@@ -167,7 +166,7 @@ def generate_recommendations(user_id, item_type):
                 if len(suggested) >= 20: break
             personalized_items = [item[0] for item in sorted(suggested.items(), key=lambda x: x[1], reverse=True)[:15]]
 
-        #  LỌC TUYỆT ĐỐI: Loại bỏ tất cả ID nằm trong disliked_items ra khỏi mọi danh sách
+
         return {
             "history": [str(x) for x in history_items if str(x) not in disliked_items],
             "popular": [str(x) for x in popular_items if str(x) not in disliked_items],

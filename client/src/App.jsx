@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, useLocation, Navigate, BrowserRouter } from 'react-router-dom'; // 🟢 Thêm Navigate
+import { Routes, Route, useLocation, Navigate, BrowserRouter } from 'react-router-dom'; 
 import Onboarding from './Page/Onboarding';
 import Navigation from './Components/Navigation';
 import Footer from './Footer';
