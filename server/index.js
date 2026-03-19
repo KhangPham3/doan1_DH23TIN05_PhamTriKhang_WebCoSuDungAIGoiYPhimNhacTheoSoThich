@@ -5,7 +5,7 @@ const nodemailer = require('nodemailer');
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+const axios = require('axios');
 const PORT = 5000;
 
 
@@ -149,9 +149,83 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-//  API LUỒNG QUÊN MẬT KHẨU MỚI
-// ==========================================
+// API ĐĂNG NHẬP MẠNG XÃ HỘI (GOOGLE & FACEBOOK)
 
+async function handleSocialLogin(email, fullName) {
+    try {
+        await poolConnect; 
+        
+        // 1. Kiểm tra Email đã tồn tại chưa
+        const checkUser = await appPool.request()
+            .input('Email', sql.VarChar(100), email)
+            .query('SELECT * FROM Users WHERE Email = @Email');
+
+        if (checkUser.recordset.length > 0) {
+            // ĐÃ TỒN TẠI: Trả về thông tin user
+            return checkUser.recordset[0];
+        } else {
+            // CHƯA TỒN TẠI: Tự động tạo tài khoản (Không cần mật khẩu)
+            const username = email.split('@')[0] + Math.floor(Math.random() * 10000); 
+            const randomPassword = Math.random().toString(36).slice(-10); // Pass ngẫu nhiên
+
+            const insertResult = await appPool.request()
+                .input('Username', sql.VarChar(50), username)
+                .input('PasswordHash', sql.VarChar(255), randomPassword)
+                .input('FullName', sql.NVarChar(100), fullName)
+                .input('Email', sql.VarChar(100), email)
+                .input('BirthYear', sql.Int, 2000)
+                .input('Gender', sql.NVarChar(20), 'Khác')
+                .query(`
+                    INSERT INTO Users (Username, PasswordHash, FullName, Email, BirthYear, Gender) 
+                    OUTPUT INSERTED.* VALUES (@Username, @PasswordHash, @FullName, @Email, @BirthYear, @Gender)
+                `);
+            
+            return insertResult.recordset[0];
+        }
+    } catch (err) {
+        throw err;
+    }
+}
+
+// Xác thực Google
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    try {
+        // Gọi thẳng Google API bằng access_token để lấy thông tin
+        const userInfoRes = await axios.get(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`);
+        const { email, name } = userInfoRes.data;
+
+        const user = await handleSocialLogin(email, name);
+        res.json({ 
+            success: true, 
+            user: { id: user.UserID, username: user.Username, fullName: user.FullName, role: user.Role, isOnboarded: user.IsOnboarded } 
+        });
+    } catch (error) {
+        console.error("Google Auth Error:", error.message);
+        res.status(401).json({ success: false, message: "Xác thực Google thất bại." });
+    }
+});
+
+// Xác thực Facebook
+app.post('/api/auth/facebook', async (req, res) => {
+    const { accessToken } = req.body;
+    try {
+        const fbRes = await axios.get(`https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`);
+        const { email, name, id } = fbRes.data;
+
+        const userEmail = email || `${id}@facebook.com`; // Dự phòng FB tạo bằng SĐT
+        const user = await handleSocialLogin(userEmail, name);
+        res.json({ 
+            success: true, 
+            user: { id: user.UserID, username: user.Username, fullName: user.FullName, role: user.Role, isOnboarded: user.IsOnboarded } 
+        });
+    } catch (error) {
+        console.error("Facebook Auth Error:", error.message);
+        res.status(401).json({ success: false, message: "Xác thực Facebook thất bại." });
+    }
+});
+
+//  API LUỒNG QUÊN MẬT KHẨU 
 // 3.1. API Gửi OTP đến Email
 app.post('/api/forgot-password/send-otp', async (req, res) => {
     const { email } = req.body;

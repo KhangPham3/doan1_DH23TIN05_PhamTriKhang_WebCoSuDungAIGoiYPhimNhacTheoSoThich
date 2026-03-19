@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useGoogleLogin } from '@react-oauth/google';
+import FacebookLogin from 'react-facebook-login/dist/facebook-login-render-props';
 
 const LoginPage = () => {
     const [isLogin, setIsLogin] = useState(true);
@@ -16,14 +18,13 @@ const LoginPage = () => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    //  HÀM XỬ LÝ KHI NGƯỜI DÙNG GÕ EMAIL
     const handleEmailChange = (e) => {
         let value = e.target.value;
-        // Chặn không cho nhập ký tự @ hoặc dấu cách
         value = value.replace(/[@\s]/g, ''); 
         setEmailPrefix(value);
     };
 
+    // --- XỬ LÝ ĐĂNG NHẬP / ĐĂNG KÝ TRUYỀN THỐNG ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
@@ -51,10 +52,10 @@ const LoginPage = () => {
                         } else {
                             window.location.href = '/'; 
                         }
-                }
+                    }
                 } else {
                     alert('🎉 Đăng ký thành công! Vui lòng đăng nhập để trải nghiệm.');
-                    setIsLogin(true); // Chuyển về form đăng nhập
+                    setIsLogin(true); 
                 }
             } else {
                 setError(data.message || 'Có lỗi xảy ra, vui lòng thử lại!');
@@ -65,11 +66,62 @@ const LoginPage = () => {
         setLoading(false);
     };
 
+    // ==========================================
+    // 🟢 XỬ LÝ ĐĂNG NHẬP GOOGLE
+    // ==========================================
+    const loginGoogle = useGoogleLogin({
+        onSuccess: async (tokenResponse) => {
+            try {
+                const authRes = await fetch('http://localhost:5000/api/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: tokenResponse.access_token })
+                });
+                
+                const data = await authRes.json();
+                if (data.success) {
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    window.location.href = data.user.isOnboarded ? '/' : '/onboarding';
+                } else {
+                    setError(data.message || 'Lỗi xác thực Google');
+                }
+            } catch (err) {
+                setError("Đăng nhập Google thất bại.");
+            }
+        },
+        onError: () => {
+            setError("Đăng nhập Google bị hủy.");
+        }
+    });
+
+    // ==========================================
+    // 🟢 XỬ LÝ ĐĂNG NHẬP FACEBOOK
+    // ==========================================
+    const responseFacebook = async (response) => {
+        if (response.accessToken) {
+            try {
+                const res = await fetch('http://localhost:5000/api/auth/facebook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accessToken: response.accessToken })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    window.location.href = data.user.isOnboarded ? '/' : '/onboarding';
+                } else {
+                    setError(data.message || 'Lỗi xác thực Facebook');
+                }
+            } catch (error) {
+                setError('Lỗi kết nối máy chủ Facebook.');
+            }
+        }
+    };
+
     return (
         <div className="login-container">
             <div className="glass-panel">
                 
-                {/* --- THANH TRƯỢT CHUYỂN ĐỔI ĐĂNG NHẬP / ĐĂNG KÝ --- */}
                 <div className="toggle-box">
                     <button type="button" className={`toggle-btn ${isLogin ? 'active' : ''}`} onClick={() => {setIsLogin(true); setError('');}}>
                         ĐĂNG NHẬP
@@ -84,10 +136,8 @@ const LoginPage = () => {
                 
                 {error && <div className="error-box">{error}</div>}
 
-                {/* --- FORM NHẬP LIỆU CHÍNH --- */}
                 <form onSubmit={handleSubmit} className="auth-form">
                     
-                    {/* CÁC TRƯỜNG DÀNH RIÊNG CHO ĐĂNG KÝ */}
                     {!isLogin && (
                         <div className="animate-slide-down">
                             <div className="input-group">
@@ -95,7 +145,6 @@ const LoginPage = () => {
                                 <label>Họ và Tên</label>
                             </div>
                             
-                            {/*  CẤU TRÚC EMAIL ADDON MỚI TÍCH HỢP FLOATING LABEL */}
                             <div className="input-group email-group">
                                 <div className="email-wrapper">
                                     <input 
@@ -128,7 +177,6 @@ const LoginPage = () => {
                         </div>
                     )}
 
-                    {/* CÁC TRƯỜNG CHUNG (USERNAME & PASSWORD) */}
                     <div className="input-group">
                         <input type="text" name="username" required value={formData.username} onChange={handleChange} placeholder=" " />
                         <label>Tên đăng nhập</label>
@@ -139,37 +187,44 @@ const LoginPage = () => {
                         <label>Mật khẩu</label>
                     </div>
 
-                    {/* NÚT QUÊN MẬT KHẨU (CHỈ HIỆN Ở ĐĂNG NHẬP) */}
                     {isLogin && (
                         <div className="forgot-password">
                             <a href="/forgot-password">Bạn quên mật khẩu?</a>
                         </div>
                     )}
 
-                    {/* NÚT SUBMIT */}
                     <button type="submit" disabled={loading} className="submit-btn shine-effect">
                         {loading ? 'ĐANG XỬ LÝ...' : (isLogin ? 'ĐĂNG NHẬP VÀO HỆ THỐNG' : 'HOÀN TẤT ĐĂNG KÝ')}
                     </button>
                 </form>
 
-                {/* --- ĐĂNG NHẬP MẠNG XÃ HỘI --- */}
                 <div className="social-divider">
                     <span>HOẶC TIẾP TỤC VỚI</span>
                 </div>
 
                 <div className="social-login">
-                    <button type="button" className="social-btn google" onClick={() => alert('Tính năng đăng nhập Google đang được tích hợp!')}>
+                    {/* NÚT GOOGLE */}
+                    <button type="button" className="social-btn google" onClick={() => loginGoogle()}>
                         <img src="https://img.icons8.com/color/48/000000/google-logo.png" alt="Google" width="24" />
                         Google
                     </button>
-                    <button type="button" className="social-btn facebook" onClick={() => alert('Tính năng đăng nhập Facebook đang được tích hợp!')}>
-                        <img src="https://img.icons8.com/color/48/000000/facebook-new.png" alt="Facebook" width="24" />
-                        Facebook
-                    </button>
+
+                    {/* NÚT FACEBOOK */}
+                    <FacebookLogin
+                        appId="8681bd4cc68507b3ca2a3455ad07ccd5"
+                        autoLoad={false}
+                        fields="name,email,picture"
+                        callback={responseFacebook}
+                        render={renderProps => (
+                            <button type="button" className="social-btn facebook" onClick={renderProps.onClick}>
+                                <img src="https://img.icons8.com/color/48/000000/facebook-new.png" alt="Facebook" width="24" />
+                                Facebook
+                            </button>
+                        )}
+                    />
                 </div>
             </div>
 
-            {/* --- CSS CHO TOÀN BỘ HIỆU ỨNG VÀ ANIMATION --- */}
             <style dangerouslySetInnerHTML={{__html: `
                 .login-container {
                     min-height: 100vh;
@@ -183,7 +238,6 @@ const LoginPage = () => {
                     padding-top: 80px;
                 }
 
-                /* HỘP KÍNH MỜ */
                 .glass-panel {
                     background: rgba(15, 15, 15, 0.75);
                     backdrop-filter: blur(25px);
@@ -229,7 +283,6 @@ const LoginPage = () => {
                     75% { transform: translateX(5px); }
                 }
 
-                /* THANH TRƯỢT ĐĂNG NHẬP / ĐĂNG KÝ */
                 .toggle-box {
                     display: flex;
                     position: relative;
@@ -253,7 +306,6 @@ const LoginPage = () => {
                 }
                 .slider.right { transform: translateX(100%); }
 
-                /* HIỆU ỨNG FLOATING LABEL CHO INPUT BÌNH THƯỜNG */
                 .input-group {
                     position: relative;
                     margin-bottom: 22px;
@@ -297,19 +349,13 @@ const LoginPage = () => {
                     top: 0; left: 12px;
                     font-size: 0.8rem;
                     color: #e50914;
-                    background: #141414; /* Trùng màu nền kính */
+                    background: #141414;
                     padding: 0 6px;
                     font-weight: bold;
                     border-radius: 4px;
                 }
-
-                /* ========================================================= */
-                /*  SỬA CHỮA CSS RIÊNG CHO KHỐI EMAIL ADDON (KHÔNG TRÀN CHỮ) */
-                /* ========================================================= */
                 
-                .email-group {
-                    position: relative; /* Đảm bảo làm gốc tọa độ cho label bay lên */
-                }
+                .email-group { position: relative; }
 
                 .email-wrapper {
                     display: flex;
@@ -349,7 +395,6 @@ const LoginPage = () => {
                     user-select: none;
                 }
 
-                /* Xử lý Floating Label cho Email */
                 .email-group label {
                     position: absolute;
                     top: 50%;
@@ -359,18 +404,15 @@ const LoginPage = () => {
                     pointer-events: none;
                     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                     z-index: 5;
-                    /* Bắt buộc phải có nền trong suốt ban đầu */
                     background: transparent; 
                 }
 
-                /* Khi ô input đang focus, HOẶC đã có chữ -> Đẩy nhãn lên */
                 .email-wrapper:focus-within + label,
                 .email-wrapper:has(.email-input-field:not(:placeholder-shown)) + label {
                     top: 0; 
                     left: 12px;
                     font-size: 0.8rem;
                     color: #e50914;
-                    /* Nền màu xám đậm trùng với Form để CHE ĐI ĐƯỜNG VIỀN BÊN DƯỚI */
                     background: #141414; 
                     padding: 0 6px;
                     font-weight: bold;
@@ -378,8 +420,6 @@ const LoginPage = () => {
                     z-index: 10;
                 }
 
-
-                /* QUÊN MẬT KHẨU */
                 .forgot-password {
                     text-align: right;
                     margin-top: -10px;
@@ -396,7 +436,6 @@ const LoginPage = () => {
                     text-shadow: 0 0 8px rgba(0, 188, 212, 0.5);
                 }
 
-                /* NÚT SUBMIT TIA SÁNG */
                 .submit-btn {
                     width: 100%; padding: 16px;
                     background: linear-gradient(45deg, #e50914, #b20710);
@@ -420,7 +459,6 @@ const LoginPage = () => {
                 }
                 .submit-btn:hover::before { left: 200%; transition: all 0.7s ease; }
 
-                /* CHIA CẮT MẠNG XÃ HỘI */
                 .social-divider {
                     display: flex; align-items: center; text-align: center; margin: 30px 0 20px;
                 }
@@ -431,7 +469,6 @@ const LoginPage = () => {
                     padding: 0 15px; color: #666; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px;
                 }
 
-                /* NÚT MẠNG XÃ HỘI */
                 .social-login { display: flex; gap: 15px; }
                 .social-btn {
                     flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -443,7 +480,6 @@ const LoginPage = () => {
                 .social-btn.facebook { background: #1877F2; color: white; }
                 .social-btn.facebook:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(24,119,242,0.4); }
 
-                /* ANIMATION MỞ FORM ĐĂNG KÝ */
                 .animate-slide-down { animation: slideDown 0.4s ease-out forwards; overflow: hidden; }
                 @keyframes slideDown {
                     from { opacity: 0; max-height: 0; transform: translateY(-10px); }
