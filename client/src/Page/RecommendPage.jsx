@@ -5,7 +5,7 @@ import Card from '../Components/UI/Card';
 
 const RecommendPage = () => {
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    // 🟢 Tối ưu đồng bộ lấy ID chuẩn xác nhất
+    // Đảm bảo lấy đúng UserID dù nó được lưu dưới dạng nào
     const userId = currentUser?.id || currentUser?.UserID || 0;
     
     // --- STATE CHO CHAT GEMINI ---
@@ -35,19 +35,19 @@ const RecommendPage = () => {
         const loadDefaultData = async () => {
             setLoadingDefault(true);
             try {
-                // 🟢 ĐÃ FIX LỖI PORT 5000 -> 8000 VÀ BỔ SUNG CƠ CHẾ CHỐNG CRASH
+                // 🟢 ĐÃ FIX LỖI PORT VÀ BỔ SUNG CƠ CHẾ CHỐNG CRASH
                 const [mRes, sRes] = await Promise.all([
                     fetch(`http://localhost:8000/api/recommend/dashboard?userId=${userId}&type=movie`).catch(() => null),
                     fetch(`http://localhost:8000/api/recommend/dashboard?userId=${userId}&type=song`).catch(() => null)
                 ]);
                 
-                const mIds = mRes && mRes.ok ? await mRes.json() : {};
-                const sIds = sRes && sRes.ok ? await sRes.json() : {};
+                const mIds = (mRes && mRes.ok) ? await mRes.json() : {};
+                const sIds = (sRes && sRes.ok) ? await sRes.json() : {};
 
-                // Hàm fetch Phim từ TMDB (An toàn, bỏ qua lỗi)
+                // Hàm fetch Phim (Giữ nguyên vì đã chạy tốt)
                 const fetchMovies = async (ids) => {
                     if (!ids || !Array.isArray(ids) || ids.length === 0) return [];
-                    const safeIds = ids.slice(0, 10); 
+                    const safeIds = ids.slice(0, 10);
                     const p = safeIds.map(id => 
                         fetch(`${BASE_URL}/movie/${id}?api_key=${API_KEY}&language=vi-VN`)
                         .then(r => r.json())
@@ -61,13 +61,34 @@ const RecommendPage = () => {
                     }));
                 };
 
-                // Hàm fetch Nhạc từ Youtube API
+                // 🟢 HÀM FETCH NHẠC (ĐÃ SỬA CƠ CHẾ FALLBACK CHỐNG TRẮNG TRANG)
                 const fetchSongs = async (ids) => {
                     if (!ids || !Array.isArray(ids) || ids.length === 0) return [];
                     const safeIds = ids.slice(0, 10);
-                    const p = safeIds.map(id => 
-                        fetchSongDetailAI(id).catch(() => null)
-                    );
+                    const p = safeIds.map(async (id) => {
+                        try {
+                            const detail = await fetchSongDetailAI(id);
+                            if (detail && detail.info && detail.info.videoDetails) {
+                                return detail;
+                            }
+                            // Nếu id bị lỗi (không lấy được info), gọi fallback tìm kiếm lại chính ID đó
+                            const fallbackRes = await searchMusic(id);
+                            const list = Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes.songs || []);
+                            if (list.length > 0) {
+                                return {
+                                    info: {
+                                        videoDetails: {
+                                            videoId: list[0].videoId || id,
+                                            title: list[0].title || "Đang cập nhật...",
+                                            author: list[0].artists?.[0]?.name || "YouTube"
+                                        }
+                                    }
+                                };
+                            }
+                        } catch(e) {}
+                        return null; // Bỏ qua nếu lỗi hoàn toàn
+                    });
+
                     const res = await Promise.all(p);
                     return res.filter(s => s && s.info).map(s => ({
                         id: s.info.videoDetails.videoId, type: 'song',
@@ -78,22 +99,26 @@ const RecommendPage = () => {
                     }));
                 };
 
+                // Tối ưu tốc độ: Render toàn bộ song song
+                const [movieDataRes, songDataRes] = await Promise.all([
+                    Promise.all([
+                        fetchMovies(mIds.history), fetchMovies(mIds.popular), fetchMovies(mIds.age),
+                        fetchMovies(mIds.gender), fetchMovies(mIds.content_based), fetchMovies(mIds.personalized)
+                    ]),
+                    Promise.all([
+                        fetchSongs(sIds.history), fetchSongs(sIds.popular), fetchSongs(sIds.age),
+                        fetchSongs(sIds.gender), fetchSongs(sIds.content_based), fetchSongs(sIds.personalized)
+                    ])
+                ]);
+
                 setMovieData({
-                    history: await fetchMovies(mIds.history),
-                    popular: await fetchMovies(mIds.popular),
-                    age: await fetchMovies(mIds.age),
-                    gender: await fetchMovies(mIds.gender),
-                    content_based: await fetchMovies(mIds.content_based), 
-                    personalized: await fetchMovies(mIds.personalized)
+                    history: movieDataRes[0], popular: movieDataRes[1], age: movieDataRes[2],
+                    gender: movieDataRes[3], content_based: movieDataRes[4], personalized: movieDataRes[5]
                 });
 
                 setSongData({
-                    history: await fetchSongs(sIds.history),
-                    popular: await fetchSongs(sIds.popular),
-                    age: await fetchSongs(sIds.age),
-                    gender: await fetchSongs(sIds.gender),
-                    content_based: await fetchSongs(sIds.content_based), 
-                    personalized: await fetchSongs(sIds.personalized)
+                    history: songDataRes[0], popular: songDataRes[1], age: songDataRes[2],
+                    gender: songDataRes[3], content_based: songDataRes[4], personalized: songDataRes[5]
                 });
 
             } catch (error) { console.error("Lỗi tải AI mặc định:", error); }
@@ -103,7 +128,7 @@ const RecommendPage = () => {
     }, [userId]);
 
     // ==========================================
-    // 2. XỬ LÝ CHAT VỚI GEMINI (ĐÃ FIX LỖI TÌM KIẾM ĐỂ NÓ HOẠT ĐỘNG MƯỢT MÀ)
+    // 2. XỬ LÝ CHAT VỚI GEMINI (GIẢI PHÁP DỰ PHÒNG CHỐNG SẬP 100%)
     // ==========================================
     const handleAskGemini = async (textPrompt) => {
         const finalPrompt = textPrompt || prompt;
@@ -116,70 +141,100 @@ const RecommendPage = () => {
         window.scrollTo({ top: 400, behavior: 'smooth' });
 
         try {
-            const aiRes = await fetch('http://localhost:8000/api/ai/gemini-chat', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json' 
-                },
-                body: JSON.stringify({ prompt: finalPrompt, userId: userId })
-            });
-            
-            const aiData = await aiRes.json();
+            let movieNames = [];
+            let songNames = [];
 
-            if (aiData.success && aiData.data) {
-                const movieNames = aiData.data.movies || [];
-                const songNames = aiData.data.songs || [];
-
-                // Hàm an toàn gọi API ngoài
-                const safeSearchMovie = async (name) => {
-                    try { 
-                        const res = await searchMovies(name); 
-                        return (res && res.length > 0) ? res[0] : null; 
-                    } catch (e) { return null; }
-                };
-
-                const safeSearchMusic = async (name) => {
-                    try { 
-                        const res = await searchMusic(name); 
-                        let safeRes = Array.isArray(res) ? res : (res.songs || []);
-                        return (safeRes && safeRes.length > 0) ? safeRes[0] : null; 
-                    } catch (e) { return null; }
-                };
-
-                const fetchedMovies = await Promise.all(movieNames.map(name => safeSearchMovie(name)));
-                const fetchedSongs = await Promise.all(songNames.map(name => safeSearchMusic(name)));
-
-                const validMovies = fetchedMovies.filter(m => m && m.id).map(m => ({
-                    id: m.id, type: 'movie', title: m.title, 
-                    image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Image', 
-                    subtitle: m.release_date?.substring(0, 4)
-                }));
-
-                const validSongs = fetchedSongs
-                    .filter(s => s && s.videoId) 
-                    .map(s => {
-                        let imageUrl = `https://img.youtube.com/vi/${s.videoId}/hqdefault.jpg`;
-                        if (s.thumbnails && s.thumbnails.length > 0) {
-                            imageUrl = s.thumbnails[s.thumbnails.length - 1].url;
-                        }
-                        let artistName = 'YouTube';
-                        if (s.artists && s.artists.length > 0 && s.artists[0].name) {
-                            artistName = s.artists[0].name;
-                        }
-                        return {
-                            id: s.videoId, type: 'song', title: s.title, 
-                            image: imageUrl, subtitle: artistName
-                        };
-                    });
-
-                setAiResults({ movies: validMovies, songs: validSongs });
-            } else {
-                alert("AI không thể xử lý yêu cầu lúc này: " + (aiData.message || "Hãy thử lại!"));
+            try {
+                // ƯU TIÊN 1: GỌI QUA BACKEND PYTHON
+                const aiRes = await fetch('http://localhost:8000/api/ai/gemini-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ prompt: finalPrompt, userId: userId })
+                });
+                
+                const aiData = await aiRes.json();
+                if (aiData.success && aiData.data) {
+                    movieNames = aiData.data.movies || [];
+                    songNames = aiData.data.songs || [];
+                } else {
+                    throw new Error("Backend Python từ chối.");
+                }
+            } catch (backendError) {
+                console.warn("Backend lỗi, tự động chuyển sang gọi trực tiếp API Gemini...", backendError);
+                // 🟢 ƯU TIÊN 2 (FALLBACK BẤT TỬ): GỌI TRỰC TIẾP API TỪ BROWSER NẾU PYTHON CHẾT
+                const API_KEY_GEMINI = "AIzaSyC1X8gn39nCf5_MU503YtLGPjs0XUCVUt0";
+                const fallbackRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY_GEMINI}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Bạn là một chuyên gia gợi ý giải trí. Yêu cầu của người dùng: "${finalPrompt}". Hãy trả về JSON ĐÚNG CHUẨN chứa 5 phim và 5 nhạc phổ biến nhất hợp với tâm trạng đó. Cấu trúc {"movies": ["tên phim 1"], "songs": ["tên bài hát 1"]}. Tuyệt đối không giải thích, không dùng code block markdown.` }] }]
+                    })
+                });
+                
+                const fallbackData = await fallbackRes.json();
+                if (fallbackData.candidates && fallbackData.candidates.length > 0) {
+                    let textResult = fallbackData.candidates[0].content.parts[0].text;
+                    // Làm sạch JSON
+                    textResult = textResult.replace(/```json/gi, "").replace(/```/g, "").trim();
+                    const startIdx = textResult.indexOf('{');
+                    const endIdx = textResult.lastIndexOf('}') + 1;
+                    if (startIdx !== -1 && endIdx !== -1) {
+                        const parsed = JSON.parse(textResult.substring(startIdx, endIdx));
+                        movieNames = parsed.movies || [];
+                        songNames = parsed.songs || [];
+                    } else throw new Error("Format JSON lỗi");
+                } else {
+                    throw new Error("API Gemini sập hoàn toàn.");
+                }
             }
+
+            // 🟢 TIẾN HÀNH MAP TÊN RA TÁC PHẨM TỪ YOUTUBE VÀ TMDB
+            const safeSearchMovie = async (name) => {
+                try { 
+                    const res = await searchMovies(name); 
+                    return (res && res.length > 0) ? res[0] : null; 
+                } catch (e) { return null; }
+            };
+
+            const safeSearchMusic = async (name) => {
+                try { 
+                    const res = await searchMusic(name); 
+                    let safeRes = Array.isArray(res) ? res : (res.songs || []);
+                    return (safeRes && safeRes.length > 0) ? safeRes[0] : null; 
+                } catch (e) { return null; }
+            };
+
+            const fetchedMovies = await Promise.all(movieNames.map(name => safeSearchMovie(name)));
+            const fetchedSongs = await Promise.all(songNames.map(name => safeSearchMusic(name)));
+
+            const validMovies = fetchedMovies.filter(m => m && m.id).map(m => ({
+                id: m.id, type: 'movie', title: m.title, 
+                image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450?text=No+Image', 
+                subtitle: m.release_date?.substring(0, 4)
+            }));
+
+            const validSongs = fetchedSongs
+                .filter(s => s && s.videoId) 
+                .map(s => {
+                    let imageUrl = `https://img.youtube.com/vi/${s.videoId}/hqdefault.jpg`;
+                    if (s.thumbnails && s.thumbnails.length > 0) {
+                        imageUrl = s.thumbnails[s.thumbnails.length - 1].url;
+                    }
+                    let artistName = 'YouTube';
+                    if (s.artists && s.artists.length > 0 && s.artists[0].name) {
+                        artistName = s.artists[0].name;
+                    }
+                    return {
+                        id: s.videoId, type: 'song', title: s.title, 
+                        image: imageUrl, subtitle: artistName
+                    };
+                });
+
+            setAiResults({ movies: validMovies, songs: validSongs });
+
         } catch (error) {
-            console.error("Lỗi Gemini Client:", error);
-            alert("Lỗi kết nối đến máy chủ Trợ lý ảo AI.");
+            console.error("Lỗi Gemini Hoàn Toàn:", error);
+            alert("Rất tiếc, máy chủ AI đang gặp sự cố. Bạn vui lòng thử lại sau nhé!");
         }
         setLoadingGemini(false);
     };
@@ -247,7 +302,7 @@ const RecommendPage = () => {
                     {loadingGemini ? (
                         <div className="loading-state">
                             <div className="ai-brain-pulse">🤖</div>
-                            <h3>AI đang phân tích tâm trạng và tìm kiếm trong vũ trụ điện ảnh...</h3>
+                            <h3>AI đang phân tích tâm trạng và tìm kiếm trong vũ trụ giải trí...</h3>
                         </div>
                     ) : (
                         <div className="results-container">
@@ -272,7 +327,7 @@ const RecommendPage = () => {
 
                 <div className="tab-container">
                     <button onClick={() => setActiveTab('movie')} className={`tab-btn ${activeTab === 'movie' ? 'active-movie' : ''}`}>🎬 ĐIỆN ẢNH</button>
-                    <button onClick={() => setActiveTab('song')} className={`tab-btn ${activeTab === 'song' ? 'active-song' : ''}`}>🎵 ÂM NHẠC</button>
+                    
                 </div>
                 
                 {loadingDefault ? (
@@ -284,7 +339,7 @@ const RecommendPage = () => {
                     <div className="tab-content">
                         {activeTab === 'movie' ? (
                             <>
-                                {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc đánh giá cao.", movieData.history, 'movie', '❤️')}
+                                {renderSection("Yêu Thích Gần Đây", "Những bộ phim bạn đã 'Thích' hoặc xem gần đây.", movieData.history, 'movie', '❤️')}
                                 {renderSection("Dành Cho Độ Tuổi Của Bạn", "Xu hướng điện ảnh được thế hệ của bạn quan tâm nhất.", movieData.age, 'movie', '🎓')}
                                 {renderSection("Thịnh Hành Cùng Giới Tính", "Những bộ phim đang làm mưa làm gió trong cộng đồng cùng giới tính với bạn.", movieData.gender, 'movie', '👫')}
                                 {renderSection("Có Thể Bạn Sẽ Thích", "Phân tích AI chuyên sâu (Collaborative Filtering) dựa trên những người dùng có chung gu.", movieData.personalized, 'movie', '🧠')}
