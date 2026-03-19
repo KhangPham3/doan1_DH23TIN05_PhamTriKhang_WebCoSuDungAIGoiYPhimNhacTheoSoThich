@@ -13,7 +13,7 @@ const SongDetail = () => {
     const [visibleRelatedCount, setVisibleRelatedCount] = useState(5); 
 
     const [aiRecommendedSongs, setAiRecommendedSongs] = useState([]);
-    const [visibleAiCount, setVisibleAiCount] = useState(5); // 🟢 Thêm phân trang cho AI
+    const [visibleAiCount, setVisibleAiCount] = useState(5); 
 
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
 
@@ -28,7 +28,7 @@ const SongDetail = () => {
         setUserRating(0);
         setHoverStar(0);
         setVisibleRelatedCount(5); 
-        setVisibleAiCount(5); // 🟢 Reset hiển thị AI khi đổi bài
+        setVisibleAiCount(5); 
     }, [id]);
 
     useEffect(() => {
@@ -62,7 +62,6 @@ const SongDetail = () => {
                 if (Array.isArray(songIds) && songIds.length > 0) {
                     let filteredIds = songIds.filter(sid => sid !== id);
                     
-                    // 🟢 MỚI: THUẬT TOÁN XÁO TRỘN NGẪU NHIÊN (Fisher-Yates Shuffle)
                     // Đảm bảo mỗi lần F5 hoặc qua bài mới, danh sách 40 bài sẽ bị xáo trộn vị trí
                     for (let i = filteredIds.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
@@ -216,7 +215,6 @@ const SongDetail = () => {
                     </div>
                 )}
 
-                {/* 🟢 PLAYLIST AI ĐÃ THÊM TÍNH NĂNG LOAD MORE */}
                 {currentUser && aiRecommendedSongs.length > 0 && (
                     <div className="section-margin animate-fade-up" style={{ animationDelay: '0.5s' }}>
                         <h3 className="section-heading border-left-blue">✨ Có thể bạn sẽ thích</h3>

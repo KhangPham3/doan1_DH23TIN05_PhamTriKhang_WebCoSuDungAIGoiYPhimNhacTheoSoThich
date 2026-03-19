@@ -1,13 +1,10 @@
-// client/src/API/tmdbAPI.jsx
 
 // 1. CẤU HÌNH (CONSTANTS)
 export const API_KEY = '46f87255f304cb323c76a53abf325782'; 
 export const BASE_URL = 'https://api.themoviedb.org/3';
 
-// URL ảnh Poster (Dọc - dùng cho danh sách phim)
 export const IMAGE_URL = 'https://image.tmdb.org/t/p/w500'; 
 
-// 👇 URL ảnh Nền (Ngang - dùng cho HeroSection) - Lấy khổ 'original' cho nét căng
 export const BACKDROP_URL = 'https://image.tmdb.org/t/p/original'; 
 
 // 2. HÀM GỌI DANH SÁCH PHIM (Có hỗ trợ lấy nhiều trang)

@@ -75,7 +75,6 @@ const HeroSection = () => {
     // Trạng thái chờ load dữ liệu
     if (!movie) return <div style={{ height: '85vh', background: '#141414' }}></div>;
 
-    // KẾT CẤU GIAO DIỆN GIỮ NGUYÊN 100% CỦA BẠN
     return (
         <div className="hero-container" style={{
             backgroundImage: `linear-gradient(to top, #121212 0%, rgba(0,0,0,0) 50%), linear-gradient(to right, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%), url(${BACKDROP_URL}${movie.backdrop_path})`,
@@ -116,7 +115,6 @@ const HeroSection = () => {
                 </div>
             </div>
 
-            {/* 👇 3. THANH ĐIỀU HƯỚNG BẰNG DẤU CHẤM (DOTS NAVIGATION) */}
             <div style={{ position: 'absolute', bottom: '40px', left: '5%', display: 'flex', gap: '10px', zIndex: 10 }}>
                 {movies.map((_, index) => (
                     <div 
@@ -133,8 +131,6 @@ const HeroSection = () => {
                     />
                 ))}
             </div>
-
-            {/* 👇 THÊM ĐOẠN CSS TRỰC TIẾP CHO ANIMATION FADE-IN */}
             <style dangerouslySetInnerHTML={{__html: `
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(20px); }
