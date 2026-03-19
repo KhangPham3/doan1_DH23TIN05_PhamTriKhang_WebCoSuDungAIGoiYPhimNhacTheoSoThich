@@ -7,7 +7,7 @@ export const IMAGE_URL = 'https://image.tmdb.org/t/p/w500';
 
 export const BACKDROP_URL = 'https://image.tmdb.org/t/p/original'; 
 
-// 2. HÀM GỌI DANH SÁCH PHIM (Có hỗ trợ lấy nhiều trang)
+// 2. HÀM GỌI DANH SÁCH PHIM 
 export const fetchMovies = async (pages = 500) => {
     try {
         const requests = [];
@@ -20,7 +20,6 @@ export const fetchMovies = async (pages = 500) => {
         }
         
         const results = await Promise.all(requests);
-        // Gộp kết quả lại thành 1 mảng duy nhất
         return results.flatMap(data => data.results || []);
     } catch (error) {
         console.error("Lỗi lấy danh sách phim:", error);
@@ -28,7 +27,7 @@ export const fetchMovies = async (pages = 500) => {
     }
 };
 
-// 3. HÀM TÌM KIẾM PHIM (Cho thanh tìm kiếm)
+// 3. HÀM TÌM KIẾM PHIM 
 export const searchMovies = async (keyword) => {
     try {
         if (!keyword) return [];
@@ -43,9 +42,8 @@ export const searchMovies = async (keyword) => {
     }
 };
 
-// ... (Các code cũ giữ nguyên)
 
-// 4. Hàm LỌC PHIM NÂNG CAO (Đã thêm chặn phim tương lai & Lấy nhiều trang)
+// 4. Hàm LỌC PHIM NÂNG CAO 
 export const discoverMovies = async (filters = {}, pagesToFetch = 3) => {
     try {
         const { sortBy, withGenres, releaseYear, region } = filters;
@@ -76,7 +74,7 @@ export const discoverMovies = async (filters = {}, pagesToFetch = 3) => {
     }
 };
 
-// 5. Hàm lấy danh sách Thể loại (Để hiện trong bộ lọc)
+// 5. Hàm lấy danh sách Thể loại 
 export const fetchGenres = async () => {
     try {
         const response = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}&language=vi-VN`);

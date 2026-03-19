@@ -22,7 +22,7 @@ function Navigation() {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // --- XỬ LÝ TÌM KIẾM ĐA NĂNG VÀ THÔNG MINH ---
+    //  XỬ LÝ TÌM KIẾM ĐA NĂNG VÀ THÔNG MINH 
     useEffect(() => {
         const timer = setTimeout(async () => {
             const kw = keyword.trim();

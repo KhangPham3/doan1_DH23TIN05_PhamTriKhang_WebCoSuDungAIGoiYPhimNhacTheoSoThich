@@ -196,7 +196,7 @@ def recommend_movies():
     final_list = list(dict.fromkeys(res.get('cold_start', []) + res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
     return jsonify(final_list[:40])
 
-# Lấy API Key miễn phí tại: https://aistudio.google.com/
+# API Key: https://aistudio.google.com/
 genai.configure(api_key="AIzaSyC1X8gn39nCf5_MU503YtLGPjs0XUCVUt0")
 model = genai.GenerativeModel('gemini-1.5-flash')
 

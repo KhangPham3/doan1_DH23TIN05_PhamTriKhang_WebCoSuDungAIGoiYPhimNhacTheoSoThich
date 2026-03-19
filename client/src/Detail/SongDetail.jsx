@@ -62,13 +62,11 @@ const SongDetail = () => {
                 if (Array.isArray(songIds) && songIds.length > 0) {
                     let filteredIds = songIds.filter(sid => sid !== id);
                     
-                    // Đảm bảo mỗi lần F5 hoặc qua bài mới, danh sách 40 bài sẽ bị xáo trộn vị trí
-                    for (let i = filteredIds.length - 1; i > 0; i--) {
+                   for (let i = filteredIds.length - 1; i > 0; i--) {
                         const j = Math.floor(Math.random() * (i + 1));
                         [filteredIds[i], filteredIds[j]] = [filteredIds[j], filteredIds[i]];
                     }
 
-                    // Sau khi xáo trộn, bốc ngẫu nhiên 20 bài để fetch (giảm tải API)
                     filteredIds = filteredIds.slice(0, 20); 
 
                     const promises = filteredIds.map(sid => fetchSongDetailAI(sid));

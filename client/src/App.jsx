@@ -18,9 +18,7 @@ import ForgotPasswordPage from './Page/ForgotPasswordPage';
 import HistoryPage from './Page/HistoryPage';
 import './App.css';
 
-// ==========================================
-// 1. BẢO VỆ KHU VỰC ADMIN (Chỉ Admin mới được vào)
-// ==========================================
+// ADMIN
 const AdminRoute = ({ children }) => {
     const user = JSON.parse(localStorage.getItem('currentUser'));
     
@@ -31,17 +29,13 @@ const AdminRoute = ({ children }) => {
     return children;
 };
 
-// ==========================================
-// 2. BẢO VỆ KHU VỰC USER (Admin không được vào)
-// ==========================================
+// USER
 const UserRoute = ({ children }) => {
     const user = JSON.parse(localStorage.getItem('currentUser'));
-    
-    // Nếu tài khoản đang là admin mà cố vào trang thường -> Ép quay lại Admin
     if (user && user.role === 'admin') {
         return <Navigate to="/admin" replace />; 
     }
-    return children; // Khách vãng lai (user = null) hoặc user thường thì vẫn xem bình thường
+    return children; 
 };
 
 function AppContent() {
@@ -50,7 +44,6 @@ function AppContent() {
 
   return (
     <>
-      {/* Chỉ hiển thị Navigation nếu không phải trang Admin */}
       {!isAdminRoute && <Navigation />} 
       
       <Routes>
@@ -68,12 +61,8 @@ function AppContent() {
         <Route path="/movie/:id" element={<UserRoute><MovieDetail /></UserRoute>} />
         <Route path="/song/:id" element={<UserRoute><SongDetail /></UserRoute>} />
         <Route path="/recommend" element={<UserRoute><RecommendPage /></UserRoute>} />
-        
-        {/* 🔴 ROUTE ADMIN ĐƯỢC BỌC TRONG <AdminRoute> */}
         <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       </Routes>
-      
-      {/* Chỉ hiển thị Footer nếu không phải trang Admin */}
       {!isAdminRoute && <Footer />}
     </>
   );
