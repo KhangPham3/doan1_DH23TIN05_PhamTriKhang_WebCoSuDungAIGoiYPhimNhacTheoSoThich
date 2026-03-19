@@ -102,12 +102,16 @@ const RecommendPage = () => {
         setLoadingGemini(true);
         setAiResults(null); 
 
-        window.scrollTo({ top: 300, behavior: 'smooth' });
+        window.scrollTo({ top: 400, behavior: 'smooth' });
 
         try {
             const aiRes = await fetch('http://localhost:8000/api/ai/gemini-chat', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: finalPrompt, userId: currentUser?.id || 0 })
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json' 
+                },
+                body: JSON.stringify({ prompt: finalPrompt, userId: user?.id || 0 })
             });
             const aiData = await aiRes.json();
 
@@ -115,13 +119,14 @@ const RecommendPage = () => {
                 const movieNames = aiData.data.movies || [];
                 const songNames = aiData.data.songs || [];
 
+                // Hàm an toàn chống sập API
                 const safeSearchMovie = async (name) => {
-                    try { const res = await searchMovies(name); return res && res.length > 0 ? res[0] : null; } 
+                    try { const res = await searchMovies(name); return (res && res.length > 0) ? res[0] : null; } 
                     catch (e) { return null; }
                 };
 
                 const safeSearchMusic = async (name) => {
-                    try { const res = await searchMusic(name); return res && res.length > 0 ? res[0] : null; } 
+                    try { const res = await searchMusic(name); return (res && res.length > 0) ? res[0] : null; } 
                     catch (e) { return null; }
                 };
 
@@ -129,19 +134,27 @@ const RecommendPage = () => {
                 const fetchedSongs = await Promise.all(songNames.map(name => safeSearchMusic(name)));
 
                 const validMovies = fetchedMovies.filter(m => m && m.id).map(m => ({
-                    id: m.id, type: 'movie', title: m.title, image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : 'https://via.placeholder.com/300x450', subtitle: m.release_date?.substring(0, 4)
+                    id: m.id, type: 'movie', title: m.title, 
+                    image: m.poster_path ? `${IMAGE_URL}${m.poster_path}` : '[https://via.placeholder.com/300x450?text=No+Image](https://via.placeholder.com/300x450?text=No+Image)', 
+                    subtitle: m.release_date?.substring(0, 4) || 'N/A'
                 }));
 
                 const validSongs = fetchedSongs.filter(s => s && s.videoId).map(s => ({
-                    id: s.videoId, type: 'song', title: s.title, image: s.thumbnails ? s.thumbnails[0].url : 'https://via.placeholder.com/300x300', subtitle: s.artists?.[0]?.name
+                    id: s.videoId, type: 'song', title: s.title, 
+                    image: s.thumbnails && s.thumbnails.length > 0 ? s.thumbnails[0].url : '[https://via.placeholder.com/300x300?text=No+Image](https://via.placeholder.com/300x300?text=No+Image)', 
+                    subtitle: s.artists && s.artists.length > 0 ? s.artists[0].name : 'YouTube'
                 }));
 
                 setAiResults({ movies: validMovies, songs: validSongs });
+            } else {
+                alert("Lỗi AI: " + (aiData.message || ""));
             }
-        } catch (error) { alert("Lỗi kết nối Gemini. Vui lòng thử lại!"); }
+        } catch (error) {
+            console.error("Lỗi Frontend:", error);
+            alert("Lỗi kết nối máy chủ AI. Vui lòng kiểm tra lại Python Server!");
+        }
         setLoadingGemini(false);
     };
-
     // ==========================================
     // 3. HÀM RENDER CÁC MỤC (SECTION)
     // ==========================================
@@ -195,7 +208,7 @@ const RecommendPage = () => {
                 </div>
             </div>
 
-            {/* --- KHU VỰC KẾT QUẢ TỪ GEMINI --- */}
+            {/* KHU VỰC KẾT QUẢ TỪ GEMINI */}
             {(loadingGemini || aiResults) && (
                 <div className="ai-results-section animate-fade-up">
                     <div className="section-divider">
@@ -213,7 +226,9 @@ const RecommendPage = () => {
                             {aiResults.songs.length > 0 && renderSection("Âm Nhạc Đề Xuất", "Giai điệu phù hợp nhất lúc này.", aiResults.songs, 'song', '🎵')}
                             
                             {aiResults.movies.length === 0 && aiResults.songs.length === 0 && (
-                                <div style={{textAlign:'center', color:'#ff4d4d'}}>Không tìm thấy kết quả hợp lệ với cơ sở dữ liệu. Vui lòng thử mô tả khác!</div>
+                                <div style={{textAlign:'center', color:'#ff4d4d', marginTop: 20}}>
+                                    Không tìm thấy kết quả hợp lệ với cơ sở dữ liệu. Vui lòng thử mô tả khác!
+                                </div>
                             )}
                         </div>
                     )}

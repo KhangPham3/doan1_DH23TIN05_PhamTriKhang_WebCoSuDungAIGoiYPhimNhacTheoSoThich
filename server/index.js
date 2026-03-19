@@ -8,6 +8,8 @@ app.use(express.json());
 
 const PORT = 5000;
 
+
+
 // 1. Cấu hình Database (Đã thêm requestTimeout để tránh lỗi đứt gánh giữa chừng)
 const dbConfig = {
     user: 'ADMIN', 
@@ -147,7 +149,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 🟢 API LUỒNG QUÊN MẬT KHẨU MỚI
+//  API LUỒNG QUÊN MẬT KHẨU MỚI
 // ==========================================
 
 // 3.1. API Gửi OTP đến Email
@@ -245,7 +247,7 @@ app.post('/api/forgot-password/reset-password', async (req, res) => {
     }
 });
 
-// 🟢 CẤU HÌNH GỬI EMAIL (NODEMAILER)
+//  CẤU HÌNH GỬI EMAIL (NODEMAILER)
 // ==========================================
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -716,6 +718,65 @@ app.delete('/api/watchlist/item/:id', async (req, res) => {
         await appPool.request().input('ID', sql.Int, req.params.id).query("DELETE FROM Watchlist WHERE ID=@ID");
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Lỗi Server' }); }
+});
+
+// ==========================================
+//  API QUẢN LÝ TRENDING (DÀNH CHO ADMIN)
+// ==========================================
+async function ensureTrendingTable() {
+    try {
+        await poolConnect;
+        await appPool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AdminTrending' AND xtype='U')
+            CREATE TABLE AdminTrending (
+                ID INT IDENTITY(1,1) PRIMARY KEY,
+                ItemID VARCHAR(50) NOT NULL,
+                ItemType VARCHAR(20) NOT NULL,
+                Title NVARCHAR(255),
+                Image VARCHAR(MAX),
+                AddedAt DATETIME DEFAULT GETDATE()
+            )
+        `);
+    } catch (err) { console.error("Lỗi tạo bảng Trending:", err); }
+}
+ensureTrendingTable();
+
+app.get('/api/admin/trending', async (req, res) => {
+    try {
+        await poolConnect;
+        const result = await appPool.request().query('SELECT * FROM AdminTrending ORDER BY AddedAt DESC');
+        res.json({ success: true, data: result.recordset });
+    } catch (err) { res.status(500).json({ success: false }); }
+});
+
+app.post('/api/admin/trending', async (req, res) => {
+    const { itemId, itemType, title, image } = req.body;
+    try {
+        await poolConnect;
+        const check = await appPool.request().input('itemId', sql.VarChar, String(itemId)).query('SELECT * FROM AdminTrending WHERE ItemID = @itemId');
+        if (check.recordset.length > 0) return res.json({ success: false, message: 'Tác phẩm đã có trong Trending!' });
+
+        // Giới hạn 10 mục mỗi loại, đẩy mục cũ nhất ra
+        await appPool.request().input('type', sql.VarChar, itemType).query(`
+            IF (SELECT COUNT(*) FROM AdminTrending WHERE ItemType = @type) >= 10
+            DELETE FROM AdminTrending WHERE ID IN (SELECT TOP 1 ID FROM AdminTrending WHERE ItemType = @type ORDER BY AddedAt ASC)
+        `);
+
+        await appPool.request()
+            .input('itemId', sql.VarChar, String(itemId)).input('itemType', sql.VarChar, itemType)
+            .input('title', sql.NVarChar, title).input('image', sql.VarChar, image)
+            .query('INSERT INTO AdminTrending (ItemID, ItemType, Title, Image) VALUES (@itemId, @itemType, @title, @image)');
+            
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false }); }
+});
+
+app.delete('/api/admin/trending/:id', async (req, res) => {
+    try {
+        await poolConnect;
+        await appPool.request().input('id', sql.Int, req.params.id).query('DELETE FROM AdminTrending WHERE ID = @id');
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false }); }
 });
 
 // ==========================================

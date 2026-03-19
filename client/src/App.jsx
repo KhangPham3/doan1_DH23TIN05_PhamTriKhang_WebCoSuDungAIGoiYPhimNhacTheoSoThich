@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom'; // 🟢 Thêm Navigate
+import { Routes, Route, useLocation, Navigate, BrowserRouter } from 'react-router-dom'; // 🟢 Thêm Navigate
 import Onboarding from './Page/Onboarding';
 import Navigation from './Components/Navigation';
 import Footer from './Footer';
@@ -54,7 +54,7 @@ function AppContent() {
       {!isAdminRoute && <Navigation />} 
       
       <Routes>
-        {/* 🟢 TẤT CẢ ROUTE THƯỜNG ĐƯỢC BỌC TRONG <UserRoute> */}
+        {/* TẤT CẢ ROUTE THƯỜNG ĐƯỢC BỌC TRONG <UserRoute> */}
         <Route path="/" element={<UserRoute><HomePage /></UserRoute>} />
         <Route path="/login" element={<UserRoute><LoginPage /></UserRoute>} />
         <Route path="/onboarding" element={<UserRoute><Onboarding /></UserRoute>} />
@@ -80,7 +80,11 @@ function AppContent() {
 }
 
 function App() {
-  return <AppContent />;
+  return( 
+  <BrowserRouter>
+    <AppContent />
+  </BrowserRouter>
+  );
 }
 
 export default App;

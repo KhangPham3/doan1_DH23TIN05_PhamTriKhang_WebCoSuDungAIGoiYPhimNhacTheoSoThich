@@ -82,75 +82,78 @@ const HomePage = () => {
                 ) : (
                     <>
                         {/* ================= HÀNG 1: TOP 10 TRENDING ================= */}
-                    <div style={{ marginTop: '10px' }}>
-                        <h2 style={{ color: '#ffc107', textAlign: 'left', marginBottom: '30px', textShadow: '0 2px 10px rgba(255,193,7,0.3)', fontSize: '2rem' }}>
-                            🔥 BẢNG XẾP HẠNG TOP 10 HÔM NAY
-                        </h2>
-                        
-                        {/* Container chia đôi màn hình 50/50 */}
-                        <div className="trending-grid">
+                        <div style={{ marginTop: '10px' }}>
+                            <h2 style={{ color: '#ffc107', textAlign: 'left', marginBottom: '30px', textShadow: '0 2px 10px rgba(255,193,7,0.3)', fontSize: '2rem' }}>
+                                🔥 BẢNG XẾP HẠNG TOP 10 HÔM NAY
+                            </h2>
                             
-                            {/* ================= CỘT PHIM (TRÁI) ================= */}
-                            <div className="trending-column">
-                                <h3 className="trending-header movie-header">Top 10 Phim</h3>
-                                <div className="trending-list">
-                                    {trendingMovies.map((m, index) => (
-                                        <div key={m.id} className="trending-card movie-card animate-fade-right" style={{ animationDelay: `${index * 0.05}s` }}>
-                                            {/* Số thứ tự mờ chìm phía sau */}
-                                            <div className="bg-number">{index + 1}</div>
-                                            
-                                            <h2 className="rank-number" style={{ color: index < 3 ? '#ffc107' : '#888' }}>#{index + 1}</h2>
-                                            <img src={`${IMAGE_URL}${m.poster_path}`} alt={m.title || "Poster phim"} className="trending-img" loading="lazy" />
-                                            
-                                            <div className="trending-info">
-                                                <div className="trending-title">{m.title}</div>
-                                                <div className="trending-meta">⭐ {m.vote_average?.toFixed(1)} • {m.release_date?.substring(0,4) || 'N/A'}</div>
+                            {/* Container chia đôi màn hình 50/50 */}
+                            <div className="trending-grid">
+                                
+                                {/* ================= CỘT PHIM (TRÁI) ================= */}
+                                <div className="trending-column">
+                                    <h3 className="trending-header movie-header">Top 10 Phim</h3>
+                                    <div className="trending-list">
+                                        {trendingMovies.map((m, index) => (
+                                            <div key={m.id} className="trending-card movie-card animate-fade-right" style={{ animationDelay: `${index * 0.05}s` }}>
+                                                {/* Số thứ tự mờ chìm phía sau */}
+                                                <div className="bg-number">{index + 1}</div>
+                                                
+                                                <h2 className="rank-number" style={{ color: index < 3 ? '#ffc107' : '#888' }}>#{index + 1}</h2>
+                                                <img src={`${IMAGE_URL}${m.poster_path}`} alt={m.title || "Poster phim"} className="trending-img" loading="lazy" />
+                                                
+                                                <div className="trending-info">
+                                                    <div className="trending-title" title={m.title}>{m.title}</div>
+                                                    <div className="trending-meta">⭐ {m.vote_average?.toFixed(1)} • {m.release_date?.substring(0,4) || 'N/A'}</div>
+                                                </div>
+                                                
+                                                {/* Lớp phủ click toàn phần */}
+                                                <a href={`/movie/${m.id}`} className="full-link"></a>
                                             </div>
-                                            
-                                            {/* Lớp phủ click toàn phần */}
-                                            <a href={`/movie/${m.id}`} className="full-link"></a>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* ================= CỘT NHẠC (PHẢI) ================= */}
-                            <div className="trending-column">
-                                <h3 className="trending-header song-header">Top 10 Bài Hát</h3>
-                                <div className="trending-list">
-                                    {trendingSongs.map((s, index) => {
-                                        // Fake điểm và năm cho đồng bộ giao diện
-                                        const fakeRating = (5.0 - (index * 0.1)).toFixed(1); 
-                                        const fakeYear = new Date().getFullYear();
+                                {/* ================= CỘT NHẠC (PHẢI) ================= */}
+                                <div className="trending-column">
+                                    <h3 className="trending-header song-header">Top 10 Bài Hát</h3>
+                                    <div className="trending-list">
+                                        {trendingSongs.map((s, index) => {
+                                            // Fake điểm và năm cho đồng bộ giao diện
+                                            const fakeRating = (5.0 - (index * 0.1)).toFixed(1); 
+                                            const fakeYear = new Date().getFullYear();
 
-                                        return (
-                                        <div key={s.id} className="trending-card song-card animate-fade-left" style={{ animationDelay: `${index * 0.05}s` }}>
-                                            <div className="bg-number">{index + 1}</div>
-                                            
-                                            <h2 className="rank-number" style={{ color: index < 3 ? '#ffc107' : '#888' }}>#{index + 1}</h2>
-                                            <img src={s.image || 'https://via.placeholder.com/80'} alt={s.title || "Ảnh bài hát"} className="trending-img song-img" loading="lazy" />
-                                            
-                                            <div className="trending-info">
-                                                <div className="trending-title">{s.title}</div>
-                                                <div className="trending-artist">{s.artist}</div>
-                                                <div className="trending-meta">⭐ {fakeRating} • {fakeYear}</div>
+                                            return (
+                                            <div key={s.id} className="trending-card song-card animate-fade-left" style={{ animationDelay: `${index * 0.05}s` }}>
+                                                <div className="bg-number">{index + 1}</div>
+                                                
+                                                <h2 className="rank-number" style={{ color: index < 3 ? '#ffc107' : '#888' }}>#{index + 1}</h2>
+                                                {/* Đã sửa class ảnh nhạc để cân đối */}
+                                                <img src={s.image || 'https://via.placeholder.com/80'} alt={s.title || "Ảnh bài hát"} className="trending-img song-img" loading="lazy" />
+                                                
+                                                <div className="trending-info">
+                                                    <div className="trending-title" title={s.title}>{s.title}</div>
+                                                    {/* Thêm style để tên ca sĩ cũng bị cắt nếu quá dài */}
+                                                    <div className="trending-artist" title={s.artist}>{s.artist}</div>
+                                                    <div className="trending-meta">⭐ {fakeRating} • {fakeYear}</div>
+                                                </div>
+                                                
+                                                <a href={`/song/${s.id}`} className="full-link"></a>
                                             </div>
-                                            
-                                            <a href={`/song/${s.id}`} className="full-link"></a>
-                                        </div>
-                                    )})}
+                                        )})}
+                                    </div>
                                 </div>
+                                
                             </div>
-                            
                         </div>
-                    </div>
             {/* --- CSS CHO TOÀN BỘ HIỆU ỨNG VÀ BỐ CỤC CHIA ĐÔI --- */}
             <style dangerouslySetInnerHTML={{__html: `
-                /* BỐ CỤC CHIA ĐÔI 50/50 */
+                /* BỐ CỤC CHIA ĐÔI 50/50 ĐÃ SỬA CÂN BẰNG */
                 .trending-grid {
                     display: grid;
                     grid-template-columns: 1fr 1fr;
                     gap: 40px;
+                    align-items: start; /* Ép 2 cột dính lên trên cùng */
                 }
                 
                 @media (max-width: 1000px) {
@@ -180,7 +183,7 @@ const HomePage = () => {
                     gap: 15px;
                 }
 
-                /* THẺ CARD CHÍNH */
+                /* THẺ CARD CHÍNH - ÉP CHIỀU CAO CHUẨN */
                 .trending-card {
                     display: flex;
                     align-items: center;
@@ -190,7 +193,8 @@ const HomePage = () => {
                     position: relative;
                     overflow: hidden;
                     border: 1px solid rgba(255,255,255,0.05);
-                    height: 100px;
+                    height: 100px; /* Chiều cao cố định */
+                    max-height: 100px; /* Chặn tuyệt đối giãn nở */
                     box-sizing: border-box;
                     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
                     cursor: pointer;
@@ -221,35 +225,63 @@ const HomePage = () => {
                     transition: all 0.1s;
                 }
 
-                /* HÌNH ẢNH TRONG CARD */
+                /* HÌNH ẢNH TRONG CARD - ÉP TỶ LỆ CHUẨN */
                 .trending-img {
-                    width: 55px; height: 80px;
-                    object-fit: cover; border-radius: 8px;
-                    margin: 0 15px; z-index: 2;
+                    width: 55px; 
+                    height: 80px; /* Bằng chiều cao khối chứa (100) trừ đi padding (10+10) */
+                    object-fit: cover; 
+                    border-radius: 8px;
+                    margin: 0 15px; 
+                    z-index: 2;
                     transition: all 0.4s ease;
                     box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+                    flex-shrink: 0; /* Ép không cho ảnh bị bóp méo */
                 }
-                .song-img { width: 80px; height: 80px; } 
+                /* Hình nhạc vuông */
+                .song-img { 
+                    width: 80px; 
+                    height: 80px; 
+                } 
                 
                 .trending-card:hover .trending-img { 
                     transform: scale(1.1) rotate(3deg); 
                 }
 
-                /* THÔNG TIN CHỮ */
-                .trending-info { z-index: 2; flex: 1; overflow: hidden; }
+                /* THÔNG TIN CHỮ - ÉP KHÔNG TRÀN CẮT ĐUÔI DẤU ... */
+                .trending-info { 
+                    z-index: 2; 
+                    flex: 1; 
+                    overflow: hidden; /* Quan trọng để cắt chữ */
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                }
+                
                 .trending-title {
-                    color: white; font-weight: bold; font-size: 1.1rem;
-                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                    color: white; 
+                    font-weight: bold; 
+                    font-size: 1.1rem;
+                    white-space: nowrap; /* Cấm xuống dòng */
+                    overflow: hidden; 
+                    text-overflow: ellipsis; /* Hiện dấu 3 chấm */
                     transition: color 0.3s;
                 }
                 .movie-card:hover .trending-title { color: #ff4d4d; }
                 .song-card:hover .trending-title { color: #1db954; }
 
-                .trending-artist { color: #bbb; font-size: 0.9rem; margin-top: 2px; }
-                .trending-meta { color: #777; font-size: 0.8rem; margin-top: 5px; font-weight: bold; }
+                /* Cắt luôn đuôi tên Artist nếu dài quá */
+                .trending-artist { 
+                    color: #bbb; 
+                    font-size: 0.9rem; 
+                    margin-top: 2px;
+                    white-space: nowrap; 
+                    overflow: hidden; 
+                    text-overflow: ellipsis; 
+                }
+                .trending-meta { color: #777; font-size: 0.8rem; margin-top: 2px; font-weight: bold; }
 
                 /* SỐ THỨ TỰ & SỐ NỀN */
-                .rank-number { width: 45px; margin: 0; text-align: center; z-index: 2; font-size: 1.8rem; font-style: italic; }
+                .rank-number { width: 45px; margin: 0; text-align: center; z-index: 2; font-size: 1.8rem; font-style: italic; flex-shrink: 0; }
                 
                 .bg-number {
                     position: absolute; left: -10px; top: 50%; transform: translateY(-50%);

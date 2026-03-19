@@ -6,10 +6,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import requests
 import urllib.parse
 from sqlalchemy import create_engine, text
-from cachetools import cached, TTLCache # 🟢 THÊM THƯ VIỆN CACHE
+from cachetools import cached, TTLCache 
 import google.generativeai as genai
 import json
 import re
+from flask_cors import CORS, cross_origin  
 
 app = Flask(__name__)
 CORS(app) 
@@ -193,42 +194,33 @@ def recommend_movies():
     if not user_id: return jsonify([])
     
     res = generate_recommendations(user_id, 'movie')
-    # 🟢 Ưu tiên Cold Start lên đầu, sau đó mới đến cá nhân hóa
     final_list = list(dict.fromkeys(res.get('cold_start', []) + res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
     return jsonify(final_list[:40])
 
 # Lấy API Key miễn phí tại: https://aistudio.google.com/
-genai.configure(api_key="NHẬP_GEMINI_API_KEY_CỦA_BẠN_VÀO_ĐÂY")
+genai.configure(api_key="AIzaSyC1X8gn39nCf5_MU503YtLGPjs0XUCVUt0")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 🟢 HÀM MỚI: TỰ ĐỘNG LẤY NGỮ CẢNH USER TỪ DATABASE ĐỂ TỐI ƯU
 def get_user_context_for_ai(user_id):
     if not user_id:
         return "Sở thích: Chưa rõ. Lịch sử: Chưa có."
-    
     try:
         with engine.connect() as conn:
-            # 1. Lấy sở thích Onboarding
             pref_query = text("SELECT ItemID FROM UserInteractions WHERE UserID = :uid AND ActionType LIKE 'PREFER_%'")
             pref_result = conn.execute(pref_query, {"uid": user_id}).fetchall()
             preferences = ", ".join([row[0] for row in pref_result]) if pref_result else "Chưa khai báo"
 
-            # 2. Lấy 10 tương tác gần nhất (chỉ lấy ID, vì Gemini đủ thông minh để tra cứu tên dựa trên một số ID phổ biến, hoặc ta gửi ID)
-            # Tuy nhiên, để Gemini làm việc tốt nhất với TMDB/Youtube, ta nên nhắc nhở nó trả về tên chính xác
             history_query = text("""
                 SELECT TOP 10 ItemID, ItemType 
                 FROM UserInteractions 
-                WHERE UserID = :uid AND ActionType IN ('VIEW', 'LIKE') 
+                WHERE UserID = :uid AND ActionType IN ('VIEW', 'LIKE', 'RATE_5') 
                 ORDER BY CreatedAt DESC
             """)
             hist_result = conn.execute(history_query, {"uid": user_id}).fetchall()
             
             history_str = ""
             if hist_result:
-                history_list = []
-                for row in hist_result:
-                    # Tối ưu: Chỉ gửi định dạng để AI hiểu đây là ID hoặc Item
-                    history_list.append(f"[{row[1].upper()}] {row[0]}") 
+                history_list = [f"[{row[1].upper()}] {row[0]}" for row in hist_result]
                 history_str = ", ".join(history_list)
             else:
                 history_str = "Chưa có tương tác"
@@ -238,25 +230,27 @@ def get_user_context_for_ai(user_id):
         print("Lỗi lấy context cho AI:", e)
         return "Sở thích: Không xác định."
 
-@app.route('/api/ai/gemini-chat', methods=['POST'])
+
+@app.route('/api/ai/gemini-chat', methods=['POST', 'OPTIONS'])
+@cross_origin(origin='*')
 def gemini_chat():
+    # Trình duyệt hỏi đường (Preflight) -> Trả lời OK ngay lập tức
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+        
     data = request.json
     user_prompt = data.get('prompt', '')
-    user_id = data.get('userId', None) # Nhận UserID từ Frontend
+    user_id = data.get('userId', 0)
 
-    # 1. Tự động lấy ngữ cảnh từ Database (Siêu nhanh nhờ Index)
     user_context = get_user_context_for_ai(user_id)
 
-    # 2. Kỹ thuật Prompt Engineering Tối Ưu (Ép trả về JSON siêu ngắn)
     system_prompt = f"""
-    Bạn là hệ thống gợi ý giải trí AI.
-    Ngữ cảnh người dùng: {user_context}
+    Bạn là một chuyên gia gợi ý giải trí (Phim và Nhạc).
+    Tâm trạng/Yêu cầu của người dùng: "{user_prompt}"
+    Ngữ cảnh lịch sử của người dùng: "{user_context}"
     
-    Yêu cầu: "{user_prompt}"
-    
-    Nhiệm vụ: Gợi ý đúng 5 phim (Movies) và 5 bài hát (Songs) thịnh hành hoặc phù hợp nhất.
-    YÊU CẦU NGHIÊM NGẶT: CHỈ xuất ra JSON thuần túy (KHÔNG Markdown, KHÔNG giải thích). Tên tác phẩm phải chính xác bằng tiếng Việt hoặc tiếng Anh phổ thông để tra cứu API.
-    Định dạng:
+    Hãy gợi ý đúng 5 bộ phim và 5 bài hát phổ biến, nổi tiếng và DỄ TÌM KIẾM NHẤT phù hợp với ngữ cảnh trên.
+    CHỈ TRẢ VỀ ĐỊNH DẠNG JSON TUYỆT ĐỐI (Không chứa markdown ```json, không giải thích thêm), cấu trúc:
     {{
         "movies": ["Tên phim 1", "Tên phim 2", "Tên phim 3", "Tên phim 4", "Tên phim 5"],
         "songs": ["Tên bài hát 1 - Tên ca sĩ", "Tên bài hát 2", "Tên bài hát 3", "Tên bài hát 4", "Tên bài hát 5"]
@@ -264,27 +258,33 @@ def gemini_chat():
     """
     
     try:
-        # Gọi Gemini
         response = model.generate_content(system_prompt)
         
-        # Tối ưu xử lý JSON: Rút trích cẩn thận để tránh lỗi parse
-        result_text = response.text.strip()
-        if result_text.startswith("```json"):
-            result_text = result_text[7:]
-        if result_text.endswith("```"):
-            result_text = result_text[:-3]
-            
-        result_json = json.loads(result_text.strip())
+        # Làm sạch chuỗi trả về (Cắt bỏ Markdown nếu AI cố tình viết sai)
+        raw_text = response.text.strip()
+        raw_text = re.sub(r'^```json\s*', '', raw_text)
+        raw_text = re.sub(r'\s*```$', '', raw_text)
         
+        result_json = json.loads(raw_text)
         return jsonify({"success": True, "data": result_json})
-        
     except json.JSONDecodeError:
-        print("Gemini không trả về JSON hợp lệ:", response.text)
-        return jsonify({"success": False, "message": "AI trả về định dạng sai. Thử lại!"}), 500
+        print("Lỗi JSON từ Gemini:", response.text)
+        return jsonify({"success": False, "message": "AI trả về sai định dạng, vui lòng thử lại."}), 500
     except Exception as e:
-        print("Gemini Error:", e)
+        print("Lỗi Gemini:", e)
         return jsonify({"success": False, "message": "Hệ thống AI đang quá tải."}), 500
 
+@app.route('/api/recommend/songs', methods=['GET'])
+def recommend_songs():
+    user_id = request.args.get('userId')
+    if not user_id: return jsonify([])
+    
+    res = generate_recommendations(user_id, 'song')
+    final_list = list(dict.fromkeys(res.get('cold_start', []) + res.get('personalized', []) + res.get('content_based', []) + res.get('popular', [])))
+    return jsonify(final_list[:40])
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000, debug=True, threaded=True)
 @app.route('/api/recommend/songs', methods=['GET'])
 def recommend_songs():
     user_id = request.args.get('userId')

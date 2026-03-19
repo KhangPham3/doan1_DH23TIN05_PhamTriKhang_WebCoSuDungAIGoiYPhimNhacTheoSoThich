@@ -266,14 +266,15 @@ function Navigation() {
                     )}
                 </div>
             
-                {/* 🟢 KHU VỰC TÀI KHOẢN ĐÃ ĐƯỢC CẬP NHẬT */}
+                {/* 🟢 KHU VỰC TÀI KHOẢN ĐÃ ĐƯỢC FIX LỖI */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}>
                     {user ? (
                         <Link to="/profile" className="user-profile-btn">
                             <div className="user-avatar">
-                                {user.fullName.charAt(0).toUpperCase()}
+                                {/* Bảo vệ bằng toán tử logic OR (||) để chống lỗi null */}
+                                {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
                             </div>
-                            <span className="user-name-text">{user.fullName}</span>
+                            <span className="user-name-text">{user?.fullName || 'User'}</span>
                         </Link>
                     ) : (
                         <button onClick={() => navigate('/login')} style={{ padding: '10px 20px', background: '#e50914', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -284,7 +285,6 @@ function Navigation() {
 
             </nav>
 
-            {/* 🟢 STYLE CHO KHU VỰC USER PROFILE NẰM TRONG HEADER */}
             <style dangerouslySetInnerHTML={{__html: `
                 .user-profile-btn {
                     display: flex;

@@ -8,14 +8,49 @@ const HeroSection = () => {
     const [currentIndex, setCurrentIndex] = useState(0); // Vị trí phim đang hiển thị
     const navigate = useNavigate();
 
-    // 1. LẤY DỮ LIỆU PHIM KHI VỪA VÀO TRANG
+    // 1. LẤY DỮ LIỆU PHIM KHI VỪA VÀO TRANG (ĐÃ TỐI ƯU LOGIC ADMIN)
     useEffect(() => {
         const loadHeroMovies = async () => {
-            const fetchedMovies = await fetchMovies(1); // Lấy trang đầu tiên
-            if (fetchedMovies && fetchedMovies.length > 0) {
-                // Lọc bỏ những phim không có ảnh nền cho đẹp
-                const validMovies = fetchedMovies.filter(m => m.backdrop_path !== null);
-                setMovies(validMovies.slice(0, 5)); // Cắt lấy 5 phim đứng đầu
+            try {
+                // Ưu tiên 1: Lấy danh sách phim mà Admin đã ghim từ Backend
+                const adminRes = await fetch('http://localhost:5000/api/admin/trending');
+                const adminData = await adminRes.json();
+                const pinnedMovies = adminData.data?.filter(item => item.ItemType === 'movie') || [];
+
+                if (pinnedMovies.length > 0) {
+                    // Xử lý dữ liệu Admin khớp với cấu trúc UI của bạn
+                    const formattedMovies = pinnedMovies.map(p => {
+                        // Tách lấy tên file ảnh để khi ráp với BACKDROP_URL ở UI không bị lỗi
+                        let cleanPath = p.Image;
+                        if (cleanPath.includes('http')) {
+                            cleanPath = '/' + cleanPath.split('/').pop();
+                        }
+
+                        return {
+                            id: p.ItemID,
+                            title: p.Title,
+                            backdrop_path: cleanPath, // Đã cắt nối an toàn
+                            vote_average: 10.0, // Phim ghim mặc định cho 10 điểm
+                            release_date: new Date().getFullYear().toString(),
+                            overview: 'Tác phẩm đang thịnh hành do Quản trị viên đề xuất. Đừng bỏ lỡ siêu phẩm này!'
+                        };
+                    });
+                    setMovies(formattedMovies.slice(0, 5));
+                } else {
+                    // Ưu tiên 2: Nếu Admin không ghim, gọi API mặc định từ TMDB
+                    const fetchedMovies = await fetchMovies(1);
+                    if (fetchedMovies && fetchedMovies.length > 0) {
+                        const validMovies = fetchedMovies.filter(m => m.backdrop_path !== null);
+                        setMovies(validMovies.slice(0, 5));
+                    }
+                }
+            } catch (error) {
+                console.error("Lỗi tải phim Hero:", error);
+                // Fallback: Lỗi server thì vẫn chạy TMDB bình thường
+                const fetchedMovies = await fetchMovies(1);
+                if (fetchedMovies && fetchedMovies.length > 0) {
+                    setMovies(fetchedMovies.filter(m => m.backdrop_path !== null).slice(0, 5));
+                }
             }
         };
         loadHeroMovies();
@@ -40,6 +75,7 @@ const HeroSection = () => {
     // Trạng thái chờ load dữ liệu
     if (!movie) return <div style={{ height: '85vh', background: '#141414' }}></div>;
 
+    // KẾT CẤU GIAO DIỆN GIỮ NGUYÊN 100% CỦA BẠN
     return (
         <div className="hero-container" style={{
             backgroundImage: `linear-gradient(to top, #121212 0%, rgba(0,0,0,0) 50%), linear-gradient(to right, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%), url(${BACKDROP_URL}${movie.backdrop_path})`,
