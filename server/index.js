@@ -541,9 +541,7 @@ app.put('/api/user/:id', async (req, res) => {
     }
 });
 
-// ==========================================
 // CÁC API DÀNH RIÊNG CHO ADMIN
-// ==========================================
 
 // 1. Lấy thống kê tổng quan
 app.get('/api/admin/stats', async (req, res) => {
@@ -595,6 +593,21 @@ app.put('/api/admin/users/:userId/status', async (req, res) => {
         res.json({ success: true, message: "Cập nhật trạng thái thành công!" });
     } catch (err) {
         res.status(500).json({ error: 'Lỗi Server' });
+    }
+});
+
+app.put('/api/admin/users/:userId/role', async (req, res) => {
+    const { role } = req.body; // 'admin' hoặc 'user'
+    const { userId } = req.params;
+    try {
+        await appPool.request()
+            .input('Role', sql.VarChar(20), role)
+            .input('UserID', sql.Int, userId)
+            .query('UPDATE Users SET Role = @Role WHERE UserID = @UserID');
+        res.json({ success: true, message: `Đã cập nhật quyền thành ${role}` });
+    } catch (err) {
+        console.error("Lỗi cập nhật quyền:", err);
+        res.status(500).json({ success: false, message: "Lỗi máy chủ" });
     }
 });
 

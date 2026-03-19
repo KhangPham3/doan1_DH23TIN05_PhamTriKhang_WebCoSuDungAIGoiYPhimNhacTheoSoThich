@@ -96,6 +96,39 @@ const AdminDashboard = () => {
         } catch (e) {}
     };
 
+    // 🟢 HÀM MỚI: XỬ LÝ PHÂN BỔ QUYỀN (ROLE)
+    const handleToggleRole = async (userId, currentRole) => {
+        // Bảo vệ: Admin không thể tự giáng cấp chính mình (Tránh bị kẹt hệ thống)
+        if (userId === currentUser.id) {
+            return alert("Lỗi: Bạn không thể tự hạ quyền của chính mình!");
+        }
+
+        const newRole = currentRole === 'admin' ? 'user' : 'admin';
+        const isConfirm = window.confirm(
+            newRole === 'admin' 
+            ? "CẢNH BÁO: Cấp quyền Admin cho tài khoản này? Họ sẽ có toàn quyền trên Dashboard." 
+            : "Hạ quyền tài khoản này xuống User thường?"
+        );
+
+        if (!isConfirm) return;
+
+        try {
+            const res = await fetch(`http://localhost:5000/api/admin/users/${userId}/role`, {
+                method: 'PUT', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ role: newRole })
+            });
+            if (res.ok) {
+                // Cập nhật lại UI lập tức với Animation trượt
+                setUsers(prev => prev.map(u => u.UserID === userId ? { ...u, Role: newRole } : u));
+            } else {
+                alert("Có lỗi xảy ra khi cập nhật quyền.");
+            }
+        } catch (e) {
+            alert("Lỗi kết nối đến máy chủ.");
+        }
+    };
+
     // SEARCH & TRENDING LOGIC
     const handleSearch = async () => {
         if(!searchQuery) return;
@@ -111,7 +144,6 @@ const AdminDashboard = () => {
         if(res.ok) setTrendingList(await res.json());
     };
 
-    // FIX LỖI GẮN TRENDING: Đảm bảo Image không bao giờ null
     const addToTrending = async (item) => {
         const targetId = activeTab === 'movies' ? item.id : (item.videoId || item.videoID || item.id);
         if(!targetId) return alert("Lỗi: Không tìm thấy ID tác phẩm!");
@@ -151,8 +183,6 @@ const AdminDashboard = () => {
         const res = await fetch(`http://localhost:5000/api/admin/top-items/${type}`);
         if(res.ok) {
             const rawData = await res.json();
-            
-            // Dịch ID thành Tên bằng cách gọi API TMDB/YouTube
             const dataWithNames = await Promise.all(rawData.map(async (item) => {
                 let name = "Đang tải...";
                 try {
@@ -244,6 +274,8 @@ const AdminDashboard = () => {
                                 <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.1)', color: '#888' }}>
                                     <th style={{ padding: '15px 10px' }}>STT</th><th style={{ padding: '15px 10px' }}>Tài khoản</th>
                                     <th style={{ padding: '15px 10px' }}>Thông tin</th><th style={{ padding: '15px 10px' }}>Trạng thái</th>
+                                    {/* 🟢 CỘT MỚI: PHÂN BỔ QUYỀN */}
+                                    <th style={{ padding: '15px 10px', textAlign: 'center' }}>Phân bổ Quyền</th>
                                     <th style={{ padding: '15px 10px', textAlign: 'center' }}>Thao tác</th>
                                 </tr>
                             </thead>
@@ -253,7 +285,10 @@ const AdminDashboard = () => {
                                         <td style={{ padding: '15px 10px', color: '#555', fontWeight: 'bold' }}>{(userCurrentPage-1)*userPageSize + idx + 1}</td>
                                         <td style={{ padding: '15px 10px' }}>
                                             <div style={{ fontWeight: 'bold', color: 'white' }}>{u.Username}</div>
-                                            <div style={{ color: '#666', fontSize: '0.8rem' }}>{u.Role?.toUpperCase() || 'USER'}</div>
+                                            {/* Hiển thị badge Admin bằng màu sắc đẹp */}
+                                            <div style={{ color: u.Role === 'admin' ? '#00bcd4' : '#666', fontSize: '0.8rem', fontWeight: u.Role === 'admin' ? 'bold' : 'normal' }}>
+                                                {u.Role === 'admin' ? '⭐ ADMIN' : 'USER'}
+                                            </div>
                                         </td>
                                         <td style={{ padding: '15px 10px' }}>
                                             <div style={{ color: '#ccc' }}>{u.FullName}</div>
@@ -262,6 +297,20 @@ const AdminDashboard = () => {
                                         <td style={{ padding: '15px 10px' }}>
                                             {u.Status === 'banned' ? (<div><span className="status-badge status-banned">BỊ KHÓA</span><br/><small style={{color:'#ff4d4d'}}>{u.BanReason}</small></div>) : <span className="status-badge status-active">HOẠT ĐỘNG</span>}
                                         </td>
+                                        
+                                        {/* 🟢 CỘT MỚI: NÚT BẬT TẮT ADMIN */}
+                                        <td style={{ padding: '15px 10px', textAlign: 'center' }}>
+                                            <label className="role-switch">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={u.Role === 'admin'} 
+                                                    onChange={() => handleToggleRole(u.UserID, u.Role)} 
+                                                    disabled={u.UserID === currentUser.id} // Vô hiệu hóa nút của chính mình
+                                                />
+                                                <span className="slider-toggle round"></span>
+                                            </label>
+                                        </td>
+
                                         <td style={{ padding: '15px 10px', textAlign: 'center' }}>
                                             <button className={`action-btn ${u.Status === 'banned' ? 'btn-unlock' : 'btn-ban'}`} onClick={() => handleToggleStatus(u)} disabled={u.Role === 'admin'}>
                                                 {u.Status === 'banned' ? 'Mở Khóa' : 'Khóa Acc'}
@@ -332,7 +381,6 @@ const AdminDashboard = () => {
                             <thead>
                                 <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.1)', color: '#888' }}>
                                     <th style={{ padding: '15px 10px', width: '60px' }}>Rank</th>
-                                    {/* 🟢 ĐÃ THÊM CỘT TÊN TÁC PHẨM */}
                                     <th style={{ padding: '15px 10px' }}>Tên Tác Phẩm</th>
                                     <th style={{ padding: '15px 10px' }}>ID</th>
                                     <th style={{ padding: '15px 10px', textAlign: 'center' }}>Lượt Xem</th>
@@ -402,8 +450,9 @@ const AdminDashboard = () => {
 
                 .action-btn { padding: 8px 15px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; background: transparent; }
                 .action-btn:active { transform: scale(0.95); }
-                .btn-ban { border: 1px solid #ff4d4d; color: #ff4d4d; } .btn-ban:hover { background: #ff4d4d; color: white; }
-                .btn-unlock { border: 1px solid #1db954; color: #1db954; } .btn-unlock:hover { background: #1db954; color: white; }
+                .action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+                .btn-ban { border: 1px solid #ff4d4d; color: #ff4d4d; } .btn-ban:hover:not(:disabled) { background: #ff4d4d; color: white; }
+                .btn-unlock { border: 1px solid #1db954; color: #1db954; } .btn-unlock:hover:not(:disabled) { background: #1db954; color: white; }
 
                 .status-badge { padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: bold; }
                 .status-active { color: #1db954; background: rgba(29, 185, 84, 0.1); }
@@ -420,6 +469,43 @@ const AdminDashboard = () => {
                 .stat-title { color: #888; font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; } .stat-value { font-size: 2.5rem; font-weight: 900; }
                 .logout-btn { padding: 15px; background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3); color: #ff4d4d; font-weight: bold; border-radius: 12px; cursor: pointer; }
                 .logout-btn:hover { background: #ff4d4d; color: white; }
+
+                /* 🟢 CSS CHO NÚT BẬT TẮT PHÂN QUYỀN (TOGGLE SWITCH) */
+                .role-switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 50px;
+                    height: 24px;
+                }
+                .role-switch input { opacity: 0; width: 0; height: 0; }
+                .slider-toggle {
+                    position: absolute; cursor: pointer;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background-color: #333; /* Xám mờ cho User */
+                    transition: .4s;
+                }
+                .slider-toggle:before {
+                    position: absolute; content: "";
+                    height: 16px; width: 16px;
+                    left: 4px; bottom: 4px;
+                    background-color: #888;
+                    transition: .4s;
+                }
+                /* Khi được check -> Đổi thành màu Neon (Admin) */
+                .role-switch input:checked + .slider-toggle {
+                    background-color: rgba(0, 188, 212, 0.3);
+                    border: 1px solid #00bcd4;
+                }
+                .role-switch input:checked + .slider-toggle:before {
+                    transform: translateX(24px);
+                    background-color: #00bcd4;
+                    box-shadow: 0 0 10px #00bcd4;
+                }
+                .slider-toggle.round { border-radius: 24px; }
+                .slider-toggle.round:before { border-radius: 50%; }
+                .role-switch input:disabled + .slider-toggle {
+                    opacity: 0.4; cursor: not-allowed;
+                }
 
                 .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
                 .modal-box { background: #111; padding: 30px; border-radius: 20px; border: 1px solid #333; width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
