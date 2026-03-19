@@ -20,8 +20,22 @@ const AdminDashboard = () => {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
-    const [trendingList, setTrendingList] = useState([]);
-    const [topItems, setTopItems] = useState([]); 
+
+    // 🟢 TÁCH BIỆT HOÀN TOÀN STATE CỦA PHIM VÀ NHẠC ĐỂ CHỐNG LỖI GHI ĐÈ API
+    const [trendingMoviesList, setTrendingMoviesList] = useState([]);
+    const [trendingSongsList, setTrendingSongsList] = useState([]);
+    const [topMovieItems, setTopMovieItems] = useState([]); 
+    const [topSongItems, setTopSongItems] = useState([]); 
+
+    // 🟢 BỘ LỌC NÂNG CAO CHO PHIM
+    const [advancedFilters, setAdvancedFilters] = useState({
+        year: '', rating: '', actor: '', director: ''
+    });
+
+    // 🟢 BỘ LỌC NÂNG CAO MỚI CHO NHẠC
+    const [musicFilters, setMusicFilters] = useState({
+        year: '', artist: ''
+    });
 
     const PIE_COLORS = ['#00bcd4', '#e50914', '#ffc107', '#1db954'];
 
@@ -30,9 +44,16 @@ const AdminDashboard = () => {
         fetchData();
     }, []);
 
+    // 🟢 TẢI ĐỘC LẬP DỮ LIỆU KHI CHUYỂN TAB
     useEffect(() => {
-        if (activeTab === 'movies') { loadTrending('movie'); loadTopItems('movie'); setSearchQuery(''); setSearchResults([]); } 
-        else if (activeTab === 'songs') { loadTrending('song'); loadTopItems('song'); setSearchQuery(''); setSearchResults([]); }
+        setSearchQuery(''); 
+        setSearchResults([]);
+        if (activeTab === 'movies' && topMovieItems.length === 0) { 
+            loadTrending('movie'); loadTopItems('movie'); 
+        } 
+        else if (activeTab === 'songs' && topSongItems.length === 0) { 
+            loadTrending('song'); loadTopItems('song'); 
+        }
     }, [activeTab]);
 
     const fetchData = async () => {
@@ -84,6 +105,7 @@ const AdminDashboard = () => {
             setBanModal({ isOpen: true, user: user, reason: '' });
         }
     };
+    
     const executeBan = async (userId, status, reason) => {
         try {
             const res = await fetch(`http://localhost:5000/api/admin/users/${userId}/status`, {
@@ -96,52 +118,74 @@ const AdminDashboard = () => {
         } catch (e) {}
     };
 
-    // 🟢 HÀM MỚI: XỬ LÝ PHÂN BỔ QUYỀN (ROLE)
     const handleToggleRole = async (userId, currentRole) => {
-        // Bảo vệ: Admin không thể tự giáng cấp chính mình (Tránh bị kẹt hệ thống)
-        if (userId === currentUser.id) {
-            return alert("Lỗi: Bạn không thể tự hạ quyền của chính mình!");
-        }
-
+        if (userId === currentUser.id) return alert("Lỗi: Bạn không thể tự hạ quyền của chính mình!");
         const newRole = currentRole === 'admin' ? 'user' : 'admin';
-        const isConfirm = window.confirm(
-            newRole === 'admin' 
-            ? "CẢNH BÁO: Cấp quyền Admin cho tài khoản này? Họ sẽ có toàn quyền trên Dashboard." 
-            : "Hạ quyền tài khoản này xuống User thường?"
-        );
-
+        const isConfirm = window.confirm(newRole === 'admin' ? "Cấp quyền Admin cho tài khoản này?" : "Hạ quyền tài khoản này xuống User thường?");
         if (!isConfirm) return;
 
         try {
             const res = await fetch(`http://localhost:5000/api/admin/users/${userId}/role`, {
-                method: 'PUT', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ role: newRole })
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: newRole })
             });
-            if (res.ok) {
-                // Cập nhật lại UI lập tức với Animation trượt
-                setUsers(prev => prev.map(u => u.UserID === userId ? { ...u, Role: newRole } : u));
-            } else {
-                alert("Có lỗi xảy ra khi cập nhật quyền.");
-            }
-        } catch (e) {
-            alert("Lỗi kết nối đến máy chủ.");
-        }
+            if (res.ok) setUsers(prev => prev.map(u => u.UserID === userId ? { ...u, Role: newRole } : u));
+        } catch (e) {}
     };
 
-    // SEARCH & TRENDING LOGIC
+    // 🟢 SEARCH TỐI ƯU CẢ PHIM VÀ NHẠC
     const handleSearch = async () => {
-        if(!searchQuery) return;
+        if (activeTab === 'songs') {
+            // Gom các bộ lọc lại thành 1 chuỗi truy vấn cho Youtube
+            let query = searchQuery;
+            if (musicFilters.artist) query += ` ${musicFilters.artist}`;
+            if (musicFilters.year) query += ` ${musicFilters.year}`;
+            
+            if(!query.trim()) return alert("Vui lòng nhập thông tin tìm kiếm nhạc!");
+            
+            try {
+                const res = await fetch(`http://localhost:5000/api/search?q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                setSearchResults(data.songs || data || []);
+            } catch(e) {}
+            return;
+        }
+
+        // TÌM PHIM QUA TMDB NÂNG CAO
         try {
-            const res = await fetch(`http://localhost:5000/api/search?q=${searchQuery}`);
+            let tmdbUrl = '';
+            if (searchQuery && !advancedFilters.year && !advancedFilters.rating && !advancedFilters.actor && !advancedFilters.director) {
+                tmdbUrl = `${BASE_URL}/search/movie?api_key=${API_KEY}&language=vi-VN&query=${encodeURIComponent(searchQuery)}`;
+            } else {
+                tmdbUrl = `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=vi-VN`;
+                if (advancedFilters.year) tmdbUrl += `&primary_release_year=${advancedFilters.year}`;
+                if (advancedFilters.rating) tmdbUrl += `&vote_average.gte=${advancedFilters.rating}`;
+                
+                if (advancedFilters.actor || advancedFilters.director) {
+                    const personName = advancedFilters.actor || advancedFilters.director;
+                    const personRes = await fetch(`${BASE_URL}/search/person?api_key=${API_KEY}&query=${encodeURIComponent(personName)}`);
+                    const personData = await personRes.json();
+                    if (personData.results && personData.results.length > 0) {
+                        const personId = personData.results[0].id;
+                        if (advancedFilters.actor) tmdbUrl += `&with_cast=${personId}`;
+                        if (advancedFilters.director) tmdbUrl += `&with_crew=${personId}`;
+                    } else {
+                        return alert("Không tìm thấy thông tin diễn viên/đạo diễn này!");
+                    }
+                }
+            }
+            const res = await fetch(tmdbUrl);
             const data = await res.json();
-            setSearchResults(activeTab === 'movies' ? data.movies : data.songs);
+            setSearchResults(data.results || []);
         } catch(e) {}
     };
 
     const loadTrending = async (type) => {
         const res = await fetch(`http://localhost:5000/api/admin/trending/${type}`);
-        if(res.ok) setTrendingList(await res.json());
+        if(res.ok) {
+            const data = await res.json();
+            if (type === 'movie') setTrendingMoviesList(data);
+            else setTrendingSongsList(data);
+        }
     };
 
     const addToTrending = async (item) => {
@@ -178,7 +222,7 @@ const AdminDashboard = () => {
         loadTrending(type);
     };
 
-    // TẢI TOP ITEMS VÀ DỊCH ID SANG TÊN
+    // 🟢 TẢI TOP ITEMS VÀ LƯU VÀO STATE RIÊNG BIỆT
     const loadTopItems = async (type) => {
         const res = await fetch(`http://localhost:5000/api/admin/top-items/${type}`);
         if(res.ok) {
@@ -197,10 +241,12 @@ const AdminDashboard = () => {
                 } catch(e) { name = item.ItemID; }
                 return { ...item, ItemName: name };
             }));
-            setTopItems(dataWithNames);
+            
+            // Gán dữ liệu vào đúng state của nó
+            if (type === 'movie') setTopMovieItems(dataWithNames);
+            else setTopSongItems(dataWithNames);
         }
     };
-
 
     if (loading) return <div className="loading-screen"><div className="modern-spinner"></div></div>;
 
@@ -274,7 +320,6 @@ const AdminDashboard = () => {
                                 <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.1)', color: '#888' }}>
                                     <th style={{ padding: '15px 10px' }}>STT</th><th style={{ padding: '15px 10px' }}>Tài khoản</th>
                                     <th style={{ padding: '15px 10px' }}>Thông tin</th><th style={{ padding: '15px 10px' }}>Trạng thái</th>
-                                    {/* 🟢 CỘT MỚI: PHÂN BỔ QUYỀN */}
                                     <th style={{ padding: '15px 10px', textAlign: 'center' }}>Phân bổ Quyền</th>
                                     <th style={{ padding: '15px 10px', textAlign: 'center' }}>Thao tác</th>
                                 </tr>
@@ -285,7 +330,6 @@ const AdminDashboard = () => {
                                         <td style={{ padding: '15px 10px', color: '#555', fontWeight: 'bold' }}>{(userCurrentPage-1)*userPageSize + idx + 1}</td>
                                         <td style={{ padding: '15px 10px' }}>
                                             <div style={{ fontWeight: 'bold', color: 'white' }}>{u.Username}</div>
-                                            {/* Hiển thị badge Admin bằng màu sắc đẹp */}
                                             <div style={{ color: u.Role === 'admin' ? '#00bcd4' : '#666', fontSize: '0.8rem', fontWeight: u.Role === 'admin' ? 'bold' : 'normal' }}>
                                                 {u.Role === 'admin' ? '⭐ ADMIN' : 'USER'}
                                             </div>
@@ -297,20 +341,12 @@ const AdminDashboard = () => {
                                         <td style={{ padding: '15px 10px' }}>
                                             {u.Status === 'banned' ? (<div><span className="status-badge status-banned">BỊ KHÓA</span><br/><small style={{color:'#ff4d4d'}}>{u.BanReason}</small></div>) : <span className="status-badge status-active">HOẠT ĐỘNG</span>}
                                         </td>
-                                        
-                                        {/* 🟢 CỘT MỚI: NÚT BẬT TẮT ADMIN */}
                                         <td style={{ padding: '15px 10px', textAlign: 'center' }}>
                                             <label className="role-switch">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={u.Role === 'admin'} 
-                                                    onChange={() => handleToggleRole(u.UserID, u.Role)} 
-                                                    disabled={u.UserID === currentUser.id} // Vô hiệu hóa nút của chính mình
-                                                />
+                                                <input type="checkbox" checked={u.Role === 'admin'} onChange={() => handleToggleRole(u.UserID, u.Role)} disabled={u.UserID === currentUser.id} />
                                                 <span className="slider-toggle round"></span>
                                             </label>
                                         </td>
-
                                         <td style={{ padding: '15px 10px', textAlign: 'center' }}>
                                             <button className={`action-btn ${u.Status === 'banned' ? 'btn-unlock' : 'btn-ban'}`} onClick={() => handleToggleStatus(u)} disabled={u.Role === 'admin'}>
                                                 {u.Status === 'banned' ? 'Mở Khóa' : 'Khóa Acc'}
@@ -333,6 +369,11 @@ const AdminDashboard = () => {
         if (activeTab === 'movies' || activeTab === 'songs') {
             const isMovie = activeTab === 'movies';
             const color = isMovie ? '#e50914' : '#1db954';
+            
+            // Lấy đúng dữ liệu của tab hiện tại để render
+            const currentTrendingList = isMovie ? trendingMoviesList : trendingSongsList;
+            const currentTopItems = isMovie ? topMovieItems : topSongItems;
+
             return (
                 <div className="animate-fade-up">
                     <h1 style={{ fontSize: '2.5rem', marginBottom: '30px', color: color }}>
@@ -342,10 +383,31 @@ const AdminDashboard = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
                         <div className="admin-box" style={{ borderTop: `4px solid ${color}` }}>
                             <h2 style={{ margin: '0 0 15px 0', fontSize: '1.3rem' }}>🔍 Gắn Tag Trending (Trang Chủ)</h2>
-                            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                                <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder={`Nhập tên ${isMovie ? 'phim' : 'bài hát'}...`} className="modern-input" style={{marginBottom: 0}} />
-                                <button onClick={handleSearch} className="action-btn" style={{ background: color, color: 'white' }}>Tìm</button>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                                <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder={`Nhập Tên ${isMovie ? 'phim' : 'bài hát'}...`} className="modern-input" style={{marginBottom: 0}} />
+                                
+                                {/* BỘ LỌC CHO PHIM */}
+                                {isMovie && (
+                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                        <input type="number" placeholder="Năm phát hành" className="modern-input" style={{flex: 1, minWidth: '80px', padding: '8px'}} value={advancedFilters.year} onChange={e => setAdvancedFilters({...advancedFilters, year: e.target.value})} />
+                                        <input type="number" placeholder="Điểm (> VD: 7.5)" step="0.1" className="modern-input" style={{flex: 1, minWidth: '80px', padding: '8px'}} value={advancedFilters.rating} onChange={e => setAdvancedFilters({...advancedFilters, rating: e.target.value})} />
+                                        <input type="text" placeholder="Diễn viên (VD: Tom Cruise)" className="modern-input" style={{flex: 2, minWidth: '120px', padding: '8px'}} value={advancedFilters.actor} onChange={e => setAdvancedFilters({...advancedFilters, actor: e.target.value})} />
+                                        <input type="text" placeholder="Đạo diễn" className="modern-input" style={{flex: 2, minWidth: '120px', padding: '8px'}} value={advancedFilters.director} onChange={e => setAdvancedFilters({...advancedFilters, director: e.target.value})} />
+                                    </div>
+                                )}
+                                
+                                {/* BỘ LỌC CHO NHẠC */}
+                                {!isMovie && (
+                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                        <input type="number" placeholder="Năm phát hành" className="modern-input" style={{flex: 1, minWidth: '100px', padding: '8px'}} value={musicFilters.year} onChange={e => setMusicFilters({...musicFilters, year: e.target.value})} />
+                                        <input type="text" placeholder="Tên Ca sĩ / Nhạc sĩ" className="modern-input" style={{flex: 2, minWidth: '150px', padding: '8px'}} value={musicFilters.artist} onChange={e => setMusicFilters({...musicFilters, artist: e.target.value})} />
+                                    </div>
+                                )}
+
+                                <button onClick={handleSearch} className="action-btn" style={{ background: color, color: 'white', width: '100%', padding: '12px' }}>TÌM KIẾM TÁC PHẨM</button>
                             </div>
+
                             <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
                                 {searchResults.map((item, idx) => (
                                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderBottom: '1px solid #333' }}>
@@ -362,7 +424,7 @@ const AdminDashboard = () => {
                         <div className="admin-box" style={{ borderTop: `4px solid #ff9800` }}>
                             <h2 style={{ margin: '0 0 15px 0', fontSize: '1.3rem' }}>🌟 Đang xuất hiện trên Web</h2>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
-                                {trendingList.map((t, idx) => (
+                                {currentTrendingList.map((t, idx) => (
                                     <div key={t.ID} style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '10px' }}>
                                         <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#888' }}>#{idx+1}</div>
                                         <img src={t.ItemImage} alt="" style={{ width: '40px', height: '40px', borderRadius: '5px', objectFit: 'cover' }} />
@@ -370,7 +432,7 @@ const AdminDashboard = () => {
                                         <button onClick={() => removeFromTrending(t.ID, isMovie ? 'movie' : 'song')} className="action-btn btn-ban" style={{ padding: '5px 10px' }}>Gỡ</button>
                                     </div>
                                 ))}
-                                {trendingList.length === 0 && <div style={{ color: '#888' }}>Chưa có tác phẩm Trending tự cấu hình.</div>}
+                                {currentTrendingList.length === 0 && <div style={{ color: '#888' }}>Chưa có tác phẩm Trending tự cấu hình.</div>}
                             </div>
                         </div>
                     </div>
@@ -389,7 +451,7 @@ const AdminDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {topItems.map((item, idx) => (
+                                {currentTopItems.map((item, idx) => (
                                     <tr key={idx} className="table-row">
                                         <td style={{ padding: '15px 10px', fontSize: '1.5rem', fontWeight: '900', color: idx < 3 ? color : '#666' }}>#{idx+1}</td>
                                         <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'white' }}>
@@ -403,7 +465,7 @@ const AdminDashboard = () => {
                                         <td style={{ padding: '15px 10px', textAlign: 'center', color: '#ffc107', fontWeight: 'bold' }}>{item.AvgRating ? item.AvgRating.toFixed(1) : '0.0'} ⭐</td>
                                     </tr>
                                 ))}
-                                {topItems.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'20px'}}>Chưa có dữ liệu tương tác.</td></tr>}
+                                {currentTopItems.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'20px'}}>Đang tải dữ liệu tương tác hoặc chưa có dữ liệu...</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -470,42 +532,14 @@ const AdminDashboard = () => {
                 .logout-btn { padding: 15px; background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3); color: #ff4d4d; font-weight: bold; border-radius: 12px; cursor: pointer; }
                 .logout-btn:hover { background: #ff4d4d; color: white; }
 
-                /* 🟢 CSS CHO NÚT BẬT TẮT PHÂN QUYỀN (TOGGLE SWITCH) */
-                .role-switch {
-                    position: relative;
-                    display: inline-block;
-                    width: 50px;
-                    height: 24px;
-                }
+                .role-switch { position: relative; display: inline-block; width: 50px; height: 24px; }
                 .role-switch input { opacity: 0; width: 0; height: 0; }
-                .slider-toggle {
-                    position: absolute; cursor: pointer;
-                    top: 0; left: 0; right: 0; bottom: 0;
-                    background-color: #333; /* Xám mờ cho User */
-                    transition: .4s;
-                }
-                .slider-toggle:before {
-                    position: absolute; content: "";
-                    height: 16px; width: 16px;
-                    left: 4px; bottom: 4px;
-                    background-color: #888;
-                    transition: .4s;
-                }
-                /* Khi được check -> Đổi thành màu Neon (Admin) */
-                .role-switch input:checked + .slider-toggle {
-                    background-color: rgba(0, 188, 212, 0.3);
-                    border: 1px solid #00bcd4;
-                }
-                .role-switch input:checked + .slider-toggle:before {
-                    transform: translateX(24px);
-                    background-color: #00bcd4;
-                    box-shadow: 0 0 10px #00bcd4;
-                }
-                .slider-toggle.round { border-radius: 24px; }
-                .slider-toggle.round:before { border-radius: 50%; }
-                .role-switch input:disabled + .slider-toggle {
-                    opacity: 0.4; cursor: not-allowed;
-                }
+                .slider-toggle { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; }
+                .slider-toggle:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: #888; transition: .4s; }
+                .role-switch input:checked + .slider-toggle { background-color: rgba(0, 188, 212, 0.3); border: 1px solid #00bcd4; }
+                .role-switch input:checked + .slider-toggle:before { transform: translateX(24px); background-color: #00bcd4; box-shadow: 0 0 10px #00bcd4; }
+                .slider-toggle.round { border-radius: 24px; } .slider-toggle.round:before { border-radius: 50%; }
+                .role-switch input:disabled + .slider-toggle { opacity: 0.4; cursor: not-allowed; }
 
                 .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
                 .modal-box { background: #111; padding: 30px; border-radius: 20px; border: 1px solid #333; width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
