@@ -31,9 +31,8 @@ const RecommendPage = () => {
         "Gợi ý nhạc buồn để khóc một trận cho đã 😭"
     ];
 
-    // ==========================================
-    // FALLBACK RANDOM (tránh lặp lại)
-    // ==========================================
+    // FALLBACK RANDOM
+
     const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
     const fetchPopularSongs = async () => {
@@ -83,9 +82,7 @@ const RecommendPage = () => {
         return results.filter(Boolean);
     };
 
-    // ==========================================
-    // 1. LOAD DEFAULT (giữ nguyên)
-    // ==========================================
+    // 1. LOAD DEFAULT
     useEffect(() => {
         if (!userId) return;
 
@@ -206,16 +203,15 @@ const RecommendPage = () => {
         loadDefaultData();
     }, [userId]);
 
-    // ==========================================
-    // 2. CHAT GEMINI – ĐÃ KHẮC PHỤC LẶP LẠI
-    // ==========================================
+    // 2. CHAT GEMINI 
+
     const handleAskGemini = async (textPrompt) => {
         const finalPrompt = textPrompt || prompt;
         if (!finalPrompt.trim()) return;
 
         setPrompt(finalPrompt);
         setLoadingGemini(true);
-        setAiResults(null);                     // ← reset sạch mỗi lần
+        setAiResults(null);                    
 
         window.scrollTo({ top: 400, behavior: 'smooth' });
 
@@ -223,7 +219,6 @@ const RecommendPage = () => {
             let movieNames = [];
             let songNames = [];
 
-            // ưu tiên backend
             try {
                 const aiRes = await fetch('http://localhost:8000/api/ai/gemini-chat', {
                     method: 'POST',
@@ -247,9 +242,9 @@ const RecommendPage = () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: `Bạn là chuyên gia gợi ý giải trí Việt Nam. 
-Yêu cầu: "${finalPrompt}". 
-Trả về JSON đúng chuẩn: {"movies": ["tên phim chính xác"], "songs": ["tên bài hát Việt Nam chính xác nhất"]}. 
-Chỉ dùng tên HOT NHẤT, dễ tìm. Không giải thích.` }] }]
+                        Yêu cầu: "${finalPrompt}". 
+                        Trả về JSON đúng chuẩn: {"movies": ["tên phim chính xác"], "songs": ["tên bài hát Việt Nam chính xác nhất"]}. 
+                        Chỉ dùng tên HOT NHẤT, dễ tìm. Không giải thích.` }] }]
                     })
                 });
 
